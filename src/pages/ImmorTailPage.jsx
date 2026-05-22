@@ -36,8 +36,9 @@ export default function ImmorTailPage() {
   const [showPanel, setShowPanel]     = useState('interactions'); // 'interactions' | 'voice' | 'ai'
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [interactionLog, setInteractionLog] = useState([]);
-  const soundsRef     = useRef(null);
-  const prevConfigRef = useRef(null);
+  const soundsRef      = useRef(null);
+  const prevConfigRef  = useRef(null);
+  const dogNotifyRef   = useRef(null);   // { notifySoundPlayed, notifyMemoryMoment }
   useEffect(() => { prevConfigRef.current = activeConfig; }, [activeConfig]);
   const [activeInteraction, setActiveInteraction] = useState(null);
 
@@ -80,6 +81,7 @@ export default function ImmorTailPage() {
   useEffect(() => {
     if (memoryMoment && soundEnabled) {
       speak('memory-moment', { name: profile?.name, title: memoryMoment.title });
+      dogNotifyRef.current?.notifyMemoryMoment?.();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memoryMoment?.id]);
@@ -127,6 +129,7 @@ export default function ImmorTailPage() {
         : list[Math.floor(Math.random() * list.length)];
 
       if (sound?.blob) {
+        dogNotifyRef.current?.notifySoundPlayed?.();
         await playBlob(sound.blob, { volume: 0.8 });
       }
     } catch {}
@@ -200,6 +203,7 @@ export default function ImmorTailPage() {
               presenceStateOverride={activeInteraction ? undefined : presenceState}
               quality={quality}
               showIntro={!!activeConfig && !prevConfigRef.current}
+              onNotifyRef={(ref) => { dogNotifyRef.current = ref; }}
               className="w-64 h-64"
               interactive={true}
             />

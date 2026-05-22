@@ -65,6 +65,7 @@ export default function VirtualDog({
   quality          = 'high',
   onReady          = null,
   showIntro        = false,
+  onNotifyRef      = null,
 }) {
   const canvasRef      = useRef(null);
   const stateTimerRef  = useRef(null);
@@ -226,22 +227,16 @@ export default function VirtualDog({
     pointerActive.current = false;
   }, []);
 
-  // Expose notifySoundPlayed / notifyMemoryMoment via ref for parent usage
-  const notifyRef = useRef(null);
-  notifyRef.current = { notifySoundPlayed, notifyMemoryMoment };
+  // Expose notify functions to parent via onNotifyRef callback
+  useEffect(() => {
+    onNotifyRef?.({ notifySoundPlayed, notifyMemoryMoment });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notifySoundPlayed, notifyMemoryMoment]);
 
   // Cleanup
   useEffect(() => () => {
     if (stateTimerRef.current) clearTimeout(stateTimerRef.current);
   }, []);
-
-  // ─── Interaction bar proxy (called by ImmorTailPage) ─────────────────────
-  // Exposed as prop callback so parent can trigger interactions
-  useEffect(() => {
-    if (typeof onInteraction === 'function') {
-      // Attach a proxy so parent can call handleInteraction via ref
-    }
-  }, [onInteraction]);
 
   return (
     <div className={`relative ${className}`}>

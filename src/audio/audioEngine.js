@@ -172,6 +172,47 @@ export async function playBlob(blob, options = {}) {
   return playBuffer(buffer, options);
 }
 
+
+/**
+ * Play a blob in a loop until stop() is called.
+ * Returns { stop } function.
+ * Used for ambient sounds (e.g. rain, fireplace crackling).
+ */
+export async function playBlobLooping(blob, { volume = 0.4, fadeIn = true } = {}) {
+  const buffer = await decodeAudioBlob(blob);
+  const ctx    = getAudioContext();
+  const source = ctx.createBufferSource();
+  const gain   = ctx.createGain();
+
+  source.buffer = buffer;
+  source.loop   = true;
+
+  gain.gain.setValueAtTime(0, ctx.currentTime);
+  if (fadeIn) {
+    gain.gain.linearRampToValueAtTime(volume, ctx.currentTime + 1.5);
+  } else {
+    gain.gain.setValueAtTime(volume, ctx.currentTime);
+  }
+
+  source.connect(gain);
+  gain.connect(ctx.destination);
+  source.start(0);
+
+  return {
+    stop: (fadeOut = true) => {
+      if (fadeOut) {
+        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 1.0);
+        setTimeout(() => { try { source.stop(); } catch {} }, 1200);
+      } else {
+        try { source.stop(); } catch {}
+      }
+    },
+    setVolume: (v) => {
+      gain.gain.linearRampToValueAtTime(v, ctx.currentTime + 0.3);
+    },
+  };
+}
+
 /**
  * Cleanup the AudioContext (call on app teardown).
  */
