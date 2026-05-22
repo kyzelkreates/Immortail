@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#C9A84C" />
+  <meta name="description" content="Immortail™ — Keep their tail wagging forever. A living memory companion for your beloved dog." />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Immortail" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="msapplication-TileColor" content="#1A1208" />
+  <meta name="msapplication-TileImage" content="/icons/icon-144.png" />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Immortail™ — Keep Their Tail Wagging Forever" />
+  <meta property="og:description" content="A living interactive memory companion built from your dog's photos, sounds, and love." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="/icons/icon-512.png" />
+
+  <!-- Apple Touch Icons -->
+  <link rel="apple-touch-icon" href="/icons/icon-152.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192.png" />
+
+  <!-- Manifest -->
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/png" href="/icons/icon-96.png" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+  <title>Immortail™ — Keep Their Tail Wagging Forever</title>
+
+  <style>
+    /* Critical above-fold styles */
+    #root-loader {
+      position: fixed; inset: 0;
+      background: #1A1208;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 9999;
+      transition: opacity 0.5s ease;
+    }
+    #root-loader .logo {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 2rem; font-weight: 600;
+      color: #C9A84C;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    }
+    #root-loader .tagline {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.85rem; color: #8C7A5E;
+      letter-spacing: 0.1em;
+    }
+    #root-loader .paw {
+      font-size: 2.5rem;
+      margin-bottom: 1.5rem;
+      animation: pawPulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pawPulse { 0%,100%{opacity:0.6;transform:scale(1)} 50%{opacity:1;transform:scale(1.1)} }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: #1A1208; }
+  </style>
+</head>
+<body>
+  <div id="root-loader">
+    <div class="paw">🐾</div>
+    <div class="logo">Immortail™</div>
+    <div class="tagline">Keep their tail wagging forever.</div>
+  </div>
+  <div id="root"></div>
+
+  <script>
+    // Hide loader when React mounts (SW registration handled by Vite PWA registerSW.js)
+    window.__hideLoader = () => {
+      const loader = document.getElementById('root-loader');
+      if (loader) { loader.style.opacity = '0'; setTimeout(() => loader.remove(), 500); }
+    };
+  </script>
+
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+</html>

@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#C9A84C" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Immortail" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/png" href="/icons/icon-96.png" />
+  <link rel="apple-touch-icon" href="/icons/icon-152.png" />
+  <title>Install Immortail™</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── Reset & base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      background: #1A1208;
+      color: #E8DCC8;
+      font-family: 'Inter', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* ── Design tokens ── */
+    :root {
+      --gold:      #C9A84C;
+      --gold-dim:  #8C7A5E;
+      --cream:     #E8DCC8;
+      --soft:      #B8A898;
+      --deep:      #1A1208;
+      --warm:      #2A1E0E;
+      --card:      rgba(201,168,76,0.06);
+      --border:    rgba(201,168,76,0.15);
+      --glow:      rgba(201,168,76,0.12);
+    }
+
+    /* ── Ambient background ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0;
+      background:
+        radial-gradient(ellipse 70% 50% at 50% -10%, rgba(201,168,76,0.18) 0%, transparent 70%),
+        radial-gradient(ellipse 50% 40% at 80% 100%, rgba(180,120,40,0.10) 0%, transparent 60%),
+        radial-gradient(ellipse 40% 30% at 10% 80%, rgba(201,168,76,0.06) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    /* ── Floating particle canvas ── */
+    #particles { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.4; }
+
+    /* ── Layout ── */
+    #app {
+      position: relative; z-index: 1;
+      min-height: 100dvh;
+      display: flex; flex-direction: column;
+      align-items: center;
+      padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px);
+    }
+
+    /* ── Header ── */
+    .header {
+      width: 100%; max-width: 480px;
+      padding: 3rem 1.5rem 0;
+      text-align: center;
+    }
+    .paw-mark {
+      font-size: 2.8rem;
+      display: block;
+      margin-bottom: 1.25rem;
+      animation: float 3s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%,100% { transform: translateY(0); }
+      50%      { transform: translateY(-8px); }
+    }
+    .logo-text {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 2.2rem; font-weight: 600;
+      color: var(--gold);
+      letter-spacing: 0.04em;
+      line-height: 1.1;
+    }
+    .tagline {
+      margin-top: 0.75rem;
+      font-size: 1rem; font-weight: 300;
+      color: var(--soft);
+      line-height: 1.6;
+      letter-spacing: 0.02em;
+    }
+
+    /* ── Step container ── */
+    .steps {
+      width: 100%; max-width: 480px;
+      padding: 2rem 1.5rem 6rem;
+      display: flex; flex-direction: column;
+      gap: 0;
+    }
+
+    /* ── Step screen ── */
+    .step {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      animation: stepIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both;
+    }
+    .step.active { display: flex; }
+    @keyframes stepIn {
+      from { opacity: 0; transform: translateY(24px) scale(0.97); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* ── Card ── */
+    .card {
+      width: 100%;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2rem 1.75rem;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    .card + .card { margin-top: 1rem; }
+
+    /* ── Step heading ── */
+    .step-label {
+      font-size: 0.7rem; font-weight: 500;
+      letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--gold); opacity: 0.7;
+      margin-bottom: 0.5rem;
+    }
+    .step-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 1.7rem; font-weight: 600;
+      color: var(--cream);
+      line-height: 1.25;
+      margin-bottom: 1rem;
+    }
+    .step-body {
+      font-size: 0.93rem; font-weight: 300;
+      color: var(--soft); line-height: 1.7;
+    }
+    .step-body strong { color: var(--cream); font-weight: 500; }
+    .step-body em {
+      font-style: italic;
+      color: var(--gold);
+      font-family: 'Playfair Display', Georgia, serif;
+    }
+
+    /* ── Feature pills ── */
+    .features {
+      display: flex; flex-wrap: wrap;
+      gap: 0.5rem; margin-top: 1.5rem;
+      justify-content: center;
+    }
+    .feature-pill {
+      background: rgba(201,168,76,0.08);
+      border: 1px solid rgba(201,168,76,0.18);
+      border-radius: 100px;
+      padding: 0.35rem 0.9rem;
+      font-size: 0.8rem; color: var(--soft);
+      display: flex; align-items: center; gap: 0.4rem;
+    }
+    .feature-pill .icon { font-size: 0.9rem; }
+
+    /* ── Buttons ── */
+    .btn-primary {
+      display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+      background: linear-gradient(135deg, #C9A84C 0%, #a8843a 100%);
+      color: #1A1208;
+      font-family: 'Inter', sans-serif;
+      font-size: 1rem; font-weight: 600;
+      border: none; border-radius: 14px;
+      padding: 0.95rem 2.25rem;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+      box-shadow: 0 4px 20px rgba(201,168,76,0.25);
+      width: 100%; max-width: 320px;
+      letter-spacing: 0.01em;
+      text-decoration: none;
+    }
+    .btn-primary:hover  { transform: translateY(-2px); box-shadow: 0 6px 28px rgba(201,168,76,0.35); }
+    .btn-primary:active { transform: scale(0.97); }
+    .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+    .btn-secondary {
+      display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+      background: transparent;
+      color: var(--soft);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.88rem; font-weight: 400;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.7rem 1.5rem;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+      width: 100%; max-width: 320px;
+      letter-spacing: 0.01em;
+      text-decoration: none;
+      margin-top: 0.75rem;
+    }
+    .btn-secondary:hover { color: var(--cream); border-color: rgba(201,168,76,0.35); }
+
+    .btn-row {
+      display: flex; flex-direction: column;
+      align-items: center;
+      gap: 0; margin-top: 2rem;
+      width: 100%;
+    }
+
+    /* ── Install button pulse ring ── */
+    .install-btn-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center; justify-content: center;
+      width: 100%; max-width: 320px;
+      margin-top: 2rem;
+    }
+    .install-btn-wrap::before {
+      content: '';
+      position: absolute;
+      inset: -6px; border-radius: 20px;
+      background: transparent;
+      border: 2px solid rgba(201,168,76,0.3);
+      animation: pulse-ring 2s ease-out infinite;
+      pointer-events: none;
+    }
+    @keyframes pulse-ring {
+      0%   { transform: scale(1);    opacity: 0.5; }
+      70%  { transform: scale(1.04); opacity: 0;   }
+      100% { transform: scale(1.04); opacity: 0;   }
+    }
+
+    /* ── Progress dots ── */
+    .progress {
+      display: flex; gap: 0.5rem;
+      justify-content: center;
+      margin-bottom: 2rem;
+    }
+    .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--border);
+      transition: background 0.3s, transform 0.3s;
+    }
+    .dot.active { background: var(--gold); transform: scale(1.3); }
+    .dot.done   { background: rgba(201,168,76,0.4); }
+
+    /* ── Instruction rows ── */
+    .instruction-list {
+      display: flex; flex-direction: column;
+      gap: 1rem; margin-top: 1.5rem;
+      text-align: left;
+    }
+    .instruction-row {
+      display: flex; align-items: flex-start; gap: 1rem;
+    }
+    .instruction-num {
+      width: 28px; height: 28px; shrink: 0;
+      border-radius: 50%;
+      background: rgba(201,168,76,0.12);
+      border: 1px solid rgba(201,168,76,0.25);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem; font-weight: 600;
+      color: var(--gold);
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .instruction-text {
+      font-size: 0.9rem; color: var(--soft);
+      line-height: 1.55;
+    }
+    .instruction-text strong { color: var(--cream); font-weight: 500; }
+    .instruction-text .tap-icon {
+      display: inline-block;
+      background: rgba(201,168,76,0.12);
+      border: 1px solid rgba(201,168,76,0.2);
+      border-radius: 6px;
+      padding: 1px 6px;
+      font-size: 0.8rem;
+      vertical-align: middle;
+    }
+
+    /* ── Browser tabs ── */
+    .browser-tabs {
+      display: flex; gap: 0.5rem;
+      margin-bottom: 1.25rem;
+      width: 100%;
+    }
+    .browser-tab {
+      flex: 1; padding: 0.55rem 0.5rem;
+      background: rgba(201,168,76,0.05);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 0.75rem; color: var(--soft);
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+      text-align: center;
+    }
+    .browser-tab.active {
+      background: rgba(201,168,76,0.12);
+      border-color: rgba(201,168,76,0.4);
+      color: var(--cream);
+    }
+    .browser-panel { display: none; }
+    .browser-panel.active { display: block; }
+
+    /* ── Success screen ── */
+    .success-icon {
+      font-size: 4rem;
+      display: block;
+      margin: 0 auto 1.5rem;
+      animation: successBounce 0.6s cubic-bezier(0.34,1.56,0.64,1) 0.2s both;
+    }
+    @keyframes successBounce {
+      from { transform: scale(0) rotate(-15deg); opacity: 0; }
+      to   { transform: scale(1) rotate(0);      opacity: 1; }
+    }
+    .success-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 2rem; font-weight: 600;
+      color: var(--cream); line-height: 1.2;
+      margin-bottom: 0.75rem;
+    }
+    .success-body {
+      font-size: 0.93rem; font-weight: 300;
+      color: var(--soft); line-height: 1.7;
+    }
+
+    /* ── Already installed banner ── */
+    #already-installed {
+      display: none;
+      width: 100%; max-width: 480px;
+      margin: 1.5rem 1.5rem 0;
+      background: rgba(201,168,76,0.08);
+      border: 1px solid rgba(201,168,76,0.25);
+      border-radius: 14px;
+      padding: 1rem 1.25rem;
+      font-size: 0.88rem; color: var(--soft);
+      text-align: center;
+    }
+    #already-installed a {
+      color: var(--gold); text-decoration: none; font-weight: 500;
+    }
+
+    /* ── Divider ── */
+    .divider {
+      display: flex; align-items: center; gap: 0.75rem;
+      margin: 1.5rem 0;
+      color: var(--border);
+      font-size: 0.75rem; color: var(--gold-dim);
+    }
+    .divider::before, .divider::after {
+      content: ''; flex: 1; height: 1px;
+      background: var(--border);
+    }
+
+    /* ── Compatibility badge ── */
+    .compat-row {
+      display: flex; gap: 0.5rem; flex-wrap: wrap;
+      justify-content: center; margin-top: 1.25rem;
+    }
+    .compat-badge {
+      display: flex; align-items: center; gap: 0.3rem;
+      background: rgba(201,168,76,0.06);
+      border: 1px solid rgba(201,168,76,0.12);
+      border-radius: 8px; padding: 0.3rem 0.7rem;
+      font-size: 0.75rem; color: var(--gold-dim);
+    }
+    .compat-badge.ok   { color: #7aaf7a; border-color: rgba(120,175,120,0.2); background: rgba(120,175,120,0.05); }
+    .compat-badge.warn { color: #c9a84c; border-color: rgba(201,168,76,0.25); background: rgba(201,168,76,0.06); }
+
+    /* ── Footnote ── */
+    .footnote {
+      text-align: center;
+      font-size: 0.76rem; color: var(--gold-dim);
+      margin-top: 1.5rem; line-height: 1.6;
+    }
+    .footnote a { color: var(--soft); text-decoration: underline; }
+
+    /* ── Responsive ── */
+    @media (min-width: 520px) {
+      .logo-text  { font-size: 2.6rem; }
+      .step-title { font-size: 2rem; }
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="particles"></canvas>
+
+<div id="app">
+
+  <!-- Already installed notice (shown when standalone) -->
+  <div id="already-installed">
+    ✅ Immortail™ is already installed on this device. &nbsp;
+    <a href="/">Open the app →</a>
+  </div>
+
+  <!-- Header -->
+  <header class="header">
+    <span class="paw-mark">🐾</span>
+    <div class="logo-text">Immortail™</div>
+    <p class="tagline">Keep their memory close —<br>whenever you need them.</p>
+  </header>
+
+  <!-- Progress dots -->
+  <div class="progress" id="progress" style="margin-top:2rem;">
+    <div class="dot active" id="dot-0"></div>
+    <div class="dot" id="dot-1"></div>
+    <div class="dot" id="dot-2"></div>
+    <div class="dot" id="dot-3"></div>
+  </div>
+
+  <!-- Steps -->
+  <div class="steps">
+
+    <!-- ══════════════════════════════════════════════════════
+         STEP 0 — Welcome / Why install
+    ══════════════════════════════════════════════════════ -->
+    <div class="step active" id="step-0">
+      <div class="card">
+        <p class="step-label">Welcome</p>
+        <h1 class="step-title">A companion that's&nbsp;always&nbsp;there</h1>
+        <p class="step-body">
+          Immortail™ lives on your device — not just in a browser tab.
+          Once installed, <strong>your companion is always one tap away</strong>,
+          even when you're offline.
+        </p>
+
+        <div class="features">
+          <div class="feature-pill"><span class="icon">📱</span> Works like a real app</div>
+          <div class="feature-pill"><span class="icon">🔌</span> Works offline</div>
+          <div class="feature-pill"><span class="icon">🔒</span> Memories stay on your device</div>
+          <div class="feature-pill"><span class="icon">🐾</span> Instant access anytime</div>
+          <div class="feature-pill"><span class="icon">✨</span> No browser chrome</div>
+          <div class="feature-pill"><span class="icon">🔔</span> Remembers everything</div>
+        </div>
+
+        <div id="compat-badges" class="compat-row" style="margin-top:1.5rem;"></div>
+      </div>
+
+      <div class="btn-row">
+        <div class="install-btn-wrap">
+          <button class="btn-primary" id="btn-start">
+            <span>🐾</span> Install Immortail™
+          </button>
+        </div>
+        <button class="btn-secondary" id="btn-skip-to-app">
+          Continue in browser instead
+        </button>
+      </div>
+
+      <p class="footnote">Free forever. No account required. Your data never leaves your device.</p>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         STEP 1 — Install prompt / Browser-specific guide
+    ══════════════════════════════════════════════════════ -->
+    <div class="step" id="step-1">
+      <div class="card">
+        <p class="step-label">Step 1 of 3</p>
+        <h2 class="step-title" id="install-step-title">Installing…</h2>
+        <p class="step-body" id="install-step-body">One moment…</p>
+
+        <!-- Chrome / Edge / Samsung install -->
+        <div id="install-panel-chrome" class="browser-panel" style="margin-top:1.5rem;">
+          <div class="install-btn-wrap" style="margin-top:0; width:100%; max-width:100%;">
+            <button class="btn-primary" id="btn-trigger-install" style="max-width:100%;">
+              <span>⬇️</span> Add to Home Screen
+            </button>
+          </div>
+          <p style="margin-top:1rem; font-size:0.82rem; color:var(--gold-dim); text-align:center;">
+            Chrome will ask you to confirm — tap <strong style="color:var(--cream)">Install</strong>.
+          </p>
+        </div>
+
+        <!-- Safari iOS / iPadOS guide -->
+        <div id="install-panel-safari-ios" class="browser-panel">
+          <div class="instruction-list">
+            <div class="instruction-row">
+              <div class="instruction-num">1</div>
+              <div class="instruction-text">
+                Tap the <strong>Share</strong> button
+                <span class="tap-icon">⎦ Share</span>
+                at the bottom of Safari.
+              </div>
+            </div>
+            <div class="instruction-row">
+              <div class="instruction-num">2</div>
+              <div class="instruction-text">
+                Scroll down and tap
+                <strong>"Add to Home Screen"</strong>.
+              </div>
+            </div>
+            <div class="instruction-row">
+              <div class="instruction-num">3</div>
+              <div class="instruction-text">
+                Tap <strong>Add</strong> in the top-right corner.
+                Immortail™ will appear on your home screen.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Safari macOS guide -->
+        <div id="install-panel-safari-mac" class="browser-panel">
+          <div class="instruction-list">
+            <div class="instruction-row">
+              <div class="instruction-num">1</div>
+              <div class="instruction-text">
+                In Safari, go to <strong>File</strong> in the menu bar.
+              </div>
+            </div>
+            <div class="instruction-row">
+              <div class="instruction-num">2</div>
+              <div class="instruction-text">
+                Click <strong>"Add to Dock"</strong>
+                (Safari 17+) or use <strong>Share → Add to Dock</strong>.
+              </div>
+            </div>
+            <div class="instruction-row">
+              <div class="instruction-num">3</div>
+              <div class="instruction-text">
+                Click <strong>Add</strong> to confirm.
+                Immortail™ opens in its own window.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Firefox guide (no native PWA install) -->
+        <div id="install-panel-firefox" class="browser-panel">
+          <p style="margin-top:1rem; font-size:0.88rem; color:var(--soft); line-height:1.7;">
+            Firefox doesn't support automatic PWA installation yet.
+            For the best experience, open this page in
+            <strong style="color:var(--cream)">Chrome, Edge, or Safari</strong>.
+          </p>
+          <div class="btn-row" style="margin-top:1.25rem;">
+            <a href="https://www.google.com/chrome/" target="_blank" rel="noopener" class="btn-secondary" style="max-width:100%;">
+              Download Chrome (free)
+            </a>
+          </div>
+        </div>
+
+        <!-- Generic fallback -->
+        <div id="install-panel-generic" class="browser-panel">
+          <p style="margin-top:1rem; font-size:0.88rem; color:var(--soft); line-height:1.7;">
+            Look for an <strong style="color:var(--cream)">install icon</strong>
+            in your browser's address bar, or use your browser menu to find
+            <strong style="color:var(--cream)">"Install app"</strong> or
+            <strong style="color:var(--cream)">"Add to Home Screen"</strong>.
+          </p>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-secondary" id="btn-already-done">
+          ✓ I've installed it — continue
+        </button>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         STEP 2 — Shortcut / Home screen guidance
+    ══════════════════════════════════════════════════════ -->
+    <div class="step" id="step-2">
+      <div class="card">
+        <p class="step-label">Step 2 of 3</p>
+        <h2 class="step-title">Find your companion</h2>
+        <p class="step-body">
+          Immortail™ has been added to your device.
+          Here's where to find it:
+        </p>
+
+        <!-- Platform-specific shortcut tips -->
+        <div id="shortcut-android" class="browser-panel" style="margin-top:1.5rem;">
+          <div class="instruction-list">
+            <div class="instruction-row">
+              <div class="instruction-num">📱</div>
+              <div class="instruction-text">
+                Find <strong>Immortail™</strong> on your <strong>Home Screen</strong>.
+                It opens full-screen — no browser address bar.
+              </div>
+            </div>
+            <div class="instruction-row">
+              <div class="instruction-num">⭐</div>
+              <div class="instruction-text">
+                You can move it to your dock for one-tap access.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="shortcut-ios" class="browser-panel" style="margin-top:1.5rem;">
+          <div class="instruction-list">
+            <div class="instruction-row">
+              <div class="instruction-num">📱</div>
+              <div class="instruction-text">
+                Find <strong>Immortail™</strong> on your <strong>Home Screen</strong>.
+                Tap it to open — it launches like a native app.
+              </div>
+            </div>
+            <div class="instruction-row">
+              <div class="instruction-num">⭐</div>
+              <div class="instruction-text">
+                Drag it to your Dock for instant access.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="shortcut-desktop" class="browser-panel" style="margin-top:1.5rem;">
+          <div class="instruction-list">
+            <div class="instruction-row">
+              <div class="instruction-num">🖥️</div>
+              <div class="instruction-text">
+                Find <strong>Immortail™</strong> in your Start Menu, Launchpad, or Applications.
+              </div>
+            </div>
+            <div class="instruction-row">
+              <div class="instruction-num">📌</div>
+              <div class="instruction-text">
+                <strong>Windows:</strong> Right-click the taskbar icon → <strong>Pin to taskbar</strong>.<br>
+                <strong>Mac:</strong> The icon is already in your Dock.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-primary" id="btn-next-to-3">
+          <span>🐾</span> Continue
+        </button>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         STEP 3 — Ready / Launch
+    ══════════════════════════════════════════════════════ -->
+    <div class="step" id="step-3">
+      <div class="card" style="padding:2.5rem 1.75rem;">
+        <span class="success-icon">🐾</span>
+        <h2 class="success-title">Immortail™ is ready</h2>
+        <p class="success-body">
+          Your companion is installed and waiting.
+          <em>Their memory is safe.</em>
+          Their tail is still wagging.
+        </p>
+
+        <div class="divider">what happens next</div>
+
+        <div class="instruction-list" style="text-align:left;">
+          <div class="instruction-row">
+            <div class="instruction-num">✦</div>
+            <div class="instruction-text">
+              <strong>Create your companion</strong> — set their name, personality, and appearance.
+            </div>
+          </div>
+          <div class="instruction-row">
+            <div class="instruction-num">✦</div>
+            <div class="instruction-text">
+              <strong>Add their photos</strong> — the AI will learn what they looked like.
+            </div>
+          </div>
+          <div class="instruction-row">
+            <div class="instruction-num">✦</div>
+            <div class="instruction-text">
+              <strong>Record their sounds</strong> — barks, whimpers, their favourite words.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <a href="/" class="btn-primary" id="btn-enter-app">
+          <span>✨</span> Create My Companion
+        </a>
+        <a href="/" class="btn-secondary" id="btn-open-existing">
+          I already have a companion →
+        </a>
+      </div>
+
+      <p class="footnote">
+        Everything is stored privately on your device.<br>
+        No cloud. No account. No subscription.
+      </p>
+    </div>
+
+  </div><!-- /steps -->
+</div><!-- /app -->
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   IMMORTAIL™ INSTALL EXPERIENCE — VANILLA JS
+   Self-contained. No framework dependencies.
+═══════════════════════════════════════════════════════════════ */
+
+(function () {
+  'use strict';
+
+  /* ── State ── */
+  let deferredPrompt = null;   // beforeinstallprompt event
+  let currentStep    = 0;
+  let browser        = detectBrowser();
+  let platform       = detectPlatform();
+
+  /* ── DOM refs ── */
+  const $ = id => document.getElementById(id);
+
+  /* ── Already installed / standalone? ── */
+  const isStandalone = () =>
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true ||
+    document.referrer.includes('android-app://');
+
+  if (isStandalone()) {
+    // Already installed — redirect to app
+    window.location.replace('/');
+    return;
+  }
+
+  /* ── beforeinstallprompt capture ── */
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+  });
+
+  window.addEventListener('appinstalled', () => {
+    deferredPrompt = null;
+    goToStep(2);
+  });
+
+  /* ── Browser / platform detection ── */
+  function detectBrowser() {
+    const ua = navigator.userAgent;
+    if (/SamsungBrowser/i.test(ua))  return 'samsung';
+    if (/Edg\//i.test(ua))           return 'edge';
+    if (/Chrome/i.test(ua) && !/OPR|Opera/i.test(ua)) return 'chrome';
+    if (/Firefox/i.test(ua))         return 'firefox';
+    if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) return 'safari';
+    if (/OPR|Opera/i.test(ua))       return 'opera';
+    return 'generic';
+  }
+
+  function detectPlatform() {
+    const ua = navigator.userAgent;
+    const isIOS     = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isAndroid = /Android/i.test(ua);
+    const isMac     = /Macintosh/i.test(ua) && !isIOS;
+    const isWin     = /Windows/i.test(ua);
+    if (isIOS)     return 'ios';
+    if (isAndroid) return 'android';
+    if (isMac)     return 'mac';
+    if (isWin)     return 'windows';
+    return 'desktop';
+  }
+
+  function canNativeInstall() {
+    return ['chrome', 'edge', 'samsung', 'opera'].includes(browser) &&
+           platform !== 'ios';
+  }
+
+  function showCompatBadges() {
+    const wrap = $('compat-badges');
+    if (!wrap) return;
+
+    const checks = [
+      { label: 'Offline support', ok: 'serviceWorker' in navigator },
+      { label: 'Local storage',   ok: 'indexedDB' in window },
+      { label: 'Install support', ok: canNativeInstall() || platform === 'ios' || browser === 'safari' },
+    ];
+
+    wrap.innerHTML = checks.map(c =>
+      `<div class="compat-badge ${c.ok ? 'ok' : 'warn'}">
+        ${c.ok ? '✓' : '⚠'} ${c.label}
+      </div>`
+    ).join('');
+  }
+
+  /* ── Step navigation ── */
+  function goToStep(n) {
+    // Hide all
+    for (let i = 0; i <= 3; i++) {
+      const el = $('step-' + i);
+      if (el) el.classList.remove('active');
+      const dot = $('dot-' + i);
+      if (dot) {
+        dot.classList.remove('active', 'done');
+        if (i < n)  dot.classList.add('done');
+        if (i === n) dot.classList.add('active');
+      }
+    }
+    const target = $('step-' + n);
+    if (target) target.classList.add('active');
+    currentStep = n;
+
+    // Scroll top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  /* ── Install step setup ── */
+  function setupInstallStep() {
+    // Hide all panels
+    ['chrome','safari-ios','safari-mac','firefox','generic'].forEach(p => {
+      const el = $('install-panel-' + p);
+      if (el) el.style.display = 'none';
+    });
+
+    const titleEl = $('install-step-title');
+    const bodyEl  = $('install-step-body');
+
+    if (canNativeInstall() && deferredPrompt) {
+      // Native prompt available
+      if (titleEl) titleEl.textContent = 'Add to your device';
+      if (bodyEl) bodyEl.textContent   = 'Tap the button below. Your browser will confirm the installation.';
+      const panel = $('install-panel-chrome');
+      if (panel) panel.style.display = 'block';
+    } else if (platform === 'ios' || browser === 'safari') {
+      const isIOS = platform === 'ios';
+      if (titleEl) titleEl.textContent = 'Add to Home Screen';
+      if (bodyEl) bodyEl.innerHTML     = 'Follow these steps in <strong>Safari</strong> to install Immortail™:';
+      const panel = $('install-panel-' + (isIOS ? 'safari-ios' : 'safari-mac'));
+      if (panel) panel.style.display = 'block';
+    } else if (browser === 'firefox') {
+      if (titleEl) titleEl.textContent = 'Browser not supported';
+      if (bodyEl) bodyEl.textContent   = 'Firefox doesn\'t support PWA installation. Try Chrome or Edge for the best experience.';
+      const panel = $('install-panel-firefox');
+      if (panel) panel.style.display = 'block';
+    } else if (canNativeInstall() && !deferredPrompt) {
+      // Chrome/Edge but prompt not ready yet (may already be installed or criteria not met)
+      if (titleEl) titleEl.textContent = 'Almost there';
+      if (bodyEl) bodyEl.innerHTML     = 'Look for the <strong>install icon</strong> (⊕) in your browser\'s address bar, or use the browser menu to find <strong>"Install app"</strong>.';
+      const panel = $('install-panel-generic');
+      if (panel) panel.style.display = 'block';
+    } else {
+      if (titleEl) titleEl.textContent = 'Install Immortail™';
+      if (bodyEl) bodyEl.textContent   = 'Use your browser\'s install option to add Immortail™ to your device.';
+      const panel = $('install-panel-generic');
+      if (panel) panel.style.display = 'block';
+    }
+  }
+
+  /* ── Shortcut step setup ── */
+  function setupShortcutStep() {
+    ['android','ios','desktop'].forEach(p => {
+      const el = $('shortcut-' + p);
+      if (el) el.style.display = 'none';
+    });
+
+    let key = 'desktop';
+    if (platform === 'android') key = 'android';
+    else if (platform === 'ios') key = 'ios';
+
+    const el = $('shortcut-' + key);
+    if (el) el.style.display = 'block';
+  }
+
+  /* ── Trigger native install ── */
+  async function triggerInstall() {
+    if (!deferredPrompt) return false;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      deferredPrompt = null;
+      return true;
+    }
+    return false;
+  }
+
+  /* ── Wire up buttons ── */
+  function init() {
+    showCompatBadges();
+
+    // Step 0 — Start
+    const btnStart = $('btn-start');
+    if (btnStart) {
+      btnStart.addEventListener('click', () => {
+        setupInstallStep();
+        goToStep(1);
+        // If native prompt, auto-trigger
+        if (canNativeInstall() && deferredPrompt) {
+          // Small delay so step animation completes
+          setTimeout(async () => {
+            const accepted = await triggerInstall();
+            if (accepted) {
+              setupShortcutStep();
+              goToStep(2);
+            }
+          }, 400);
+        }
+      });
+    }
+
+    // Skip to app
+    const btnSkip = $('btn-skip-to-app');
+    if (btnSkip) btnSkip.addEventListener('click', () => { window.location.href = '/'; });
+
+    // Step 1 — Trigger install (chrome fallback button)
+    const btnTrigger = $('btn-trigger-install');
+    if (btnTrigger) {
+      btnTrigger.addEventListener('click', async () => {
+        if (deferredPrompt) {
+          const accepted = await triggerInstall();
+          if (accepted) {
+            setupShortcutStep();
+            goToStep(2);
+          }
+        } else {
+          // Prompt gone (may have been dismissed or used) — move forward
+          setupShortcutStep();
+          goToStep(2);
+        }
+      });
+    }
+
+    // Step 1 — "I already installed it"
+    const btnDone = $('btn-already-done');
+    if (btnDone) {
+      btnDone.addEventListener('click', () => {
+        setupShortcutStep();
+        goToStep(2);
+      });
+    }
+
+    // Step 2 — Continue to Step 3
+    const btnNext = $('btn-next-to-3');
+    if (btnNext) btnNext.addEventListener('click', () => goToStep(3));
+
+    // Step 3 — Check if existing profile in IDB on click
+    const btnEnter = $('btn-enter-app');
+    if (btnEnter) {
+      btnEnter.addEventListener('click', (e) => {
+        e.preventDefault();
+        checkExistingProfile().then(hasProfile => {
+          window.location.href = hasProfile ? '/' : '/';
+        });
+      });
+    }
+
+    const btnExisting = $('btn-open-existing');
+    if (btnExisting) btnExisting.addEventListener('click', (e) => {
+      e.preventDefault();
+      window.location.href = '/';
+    });
+  }
+
+  /* ── Check existing IDB profile (best effort) ── */
+  async function checkExistingProfile() {
+    try {
+      const db = await new Promise((resolve, reject) => {
+        const req = indexedDB.open('immortail-db');
+        req.onsuccess = () => resolve(req.result);
+        req.onerror   = () => reject();
+      });
+      const stores = Array.from(db.objectStoreNames);
+      if (!stores.includes('profiles')) return false;
+      const count = await new Promise((resolve) => {
+        const tx  = db.transaction('profiles', 'readonly');
+        const req = tx.objectStore('profiles').count();
+        req.onsuccess = () => resolve(req.result);
+        req.onerror   = () => resolve(0);
+      });
+      db.close();
+      return count > 0;
+    } catch { return false; }
+  }
+
+  /* ── Particle canvas ── */
+  function initParticles() {
+    const canvas = $('particles');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let W, H, particles;
+
+    function resize() {
+      W = canvas.width  = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+    }
+
+    function makeParticle() {
+      return {
+        x:     Math.random() * W,
+        y:     Math.random() * H,
+        r:     Math.random() * 1.5 + 0.3,
+        dx:    (Math.random() - 0.5) * 0.2,
+        dy:    -Math.random() * 0.3 - 0.1,
+        alpha: Math.random() * 0.4 + 0.05,
+        pulse: Math.random() * Math.PI * 2,
+      };
+    }
+
+    function setup() {
+      resize();
+      particles = Array.from({ length: 60 }, makeParticle);
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      particles.forEach(p => {
+        p.pulse += 0.015;
+        p.alpha = 0.05 + 0.12 * Math.abs(Math.sin(p.pulse));
+        p.x += p.dx;
+        p.y += p.dy;
+        if (p.y < -4)      p.y = H + 4;
+        if (p.x < -4)      p.x = W + 4;
+        if (p.x > W + 4)   p.x = -4;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(201,168,76,${p.alpha})`;
+        ctx.fill();
+      });
+      requestAnimationFrame(draw);
+    }
+
+    window.addEventListener('resize', resize);
+    setup();
+    draw();
+  }
+
+  /* ── Boot ── */
+  document.addEventListener('DOMContentLoaded', () => {
+    init();
+    initParticles();
+  });
+
+})();
+</script>
+
+</body>
+</html>
