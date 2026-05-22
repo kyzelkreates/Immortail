@@ -36,7 +36,9 @@ export default function ImmorTailPage() {
   const [showPanel, setShowPanel]     = useState('interactions'); // 'interactions' | 'voice' | 'ai'
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [interactionLog, setInteractionLog] = useState([]);
-  const soundsRef = useRef(null);
+  const soundsRef     = useRef(null);
+  const prevConfigRef = useRef(null);
+  useEffect(() => { prevConfigRef.current = activeConfig; }, [activeConfig]);
   const [activeInteraction, setActiveInteraction] = useState(null);
 
   // ── Performance governor ────────────────────────────────────────────────────
@@ -196,6 +198,8 @@ export default function ImmorTailPage() {
               dogConfig={activeConfig}
               onInteraction={handleInteraction}
               presenceStateOverride={activeInteraction ? undefined : presenceState}
+              quality={quality}
+              showIntro={!!activeConfig && !prevConfigRef.current}
               className="w-64 h-64"
               interactive={true}
             />

@@ -1,45 +1,95 @@
 /**
  * Immortail™ — Virtual Dog Component
- * Canvas-rendered animated dog with interaction support.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Canvas-rendered emotional companion with:
+ *   - Local AI behaviour engine (behaviourWorker.js)
+ *   - Pointer/touch head tracking
+ *   - Cinematic introduction sequence
+ *   - Adaptive quality from performance governor
+ *   - Smooth state blending (no hard cuts)
+ *
+ * Props:
+ *   profile              — dog profile object
+ *   dogConfig            — AI-generated dog config
+ *   onInteraction        — callback(type) when user interacts
+ *   className            — CSS class
+ *   interactive          — enable/disable touch
+ *   presenceStateOverride— from useEmotionalPresence (idle sequence)
+ *   quality              — 'low' | 'medium' | 'high' from performance governor
+ *   onReady              — called when intro sequence completes
+ *   showIntro            — trigger cinematic intro (e.g. after reconstruction)
  */
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   initRenderer, destroyRenderer,
   setDogState, updateAppearance,
-  buildAppearanceFromConfig
+  buildAppearanceFromConfig,
+  setQuality, setPointerPosition, clearPointer,
+  playIntroduction,
 } from './dogRenderer.js';
+import { useBehaviourEngine } from '../hooks/useBehaviourEngine.js';
 import { DOG_STATES, INTERACTIONS } from '../core/constants.js';
 
+// Timed states that return to idle
 const STATE_DURATION = {
-  [DOG_STATES.EXCITED]:  3000,
-  [DOG_STATES.HAPPY]:    4000,
-  [DOG_STATES.PLAYING]:  5000,
-  [DOG_STATES.WAGGING]:  3000,
-  [DOG_STATES.LISTENING]:2000,
+  [DOG_STATES.EXCITED]:   3500,
+  [DOG_STATES.HAPPY]:     4500,
+  [DOG_STATES.PLAYING]:   5500,
+  [DOG_STATES.WAGGING]:   3000,
+  [DOG_STATES.LISTENING]: 2500,
+  [DOG_STATES.RUNNING]:   3000,
+};
+
+// Maps behaviour engine dog state → renderer DOG_STATE constant
+const DOGSTATE_MAP = {
+  idle:      DOG_STATES.IDLE,
+  happy:     DOG_STATES.HAPPY,
+  excited:   DOG_STATES.EXCITED,
+  sleeping:  DOG_STATES.SLEEPING,
+  sitting:   DOG_STATES.SITTING,
+  listening: DOG_STATES.LISTENING,
+  playing:   DOG_STATES.PLAYING,
+  wagging:   DOG_STATES.WAGGING,
+  walking:   DOG_STATES.WALKING,
+  running:   DOG_STATES.RUNNING,
 };
 
 export default function VirtualDog({
   profile,
   dogConfig,
   onInteraction,
-  className = '',
-  interactive = true,
-  presenceStateOverride = null,  // from useEmotionalPresence
+  className        = '',
+  interactive      = true,
+  presenceStateOverride = null,
+  quality          = 'high',
+  onReady          = null,
+  showIntro        = false,
 }) {
-  const canvasRef = useRef(null);
-  const stateTimerRef = useRef(null);
+  const canvasRef      = useRef(null);
+  const stateTimerRef  = useRef(null);
+  const pointerActive  = useRef(false);
   const [currentState, setCurrentState] = useState(DOG_STATES.IDLE);
-  const [reaction, setReaction]         = useState('');
+  const [reaction,     setReaction]     = useState('');
   const [showReaction, setShowReaction] = useState(false);
+  const [introComplete,setIntroComplete]= useState(false);
 
-  // ─── Init canvas ──────────────────────────────────────────────────────────
+  // ── Behaviour engine (local AI worker) ─────────────────────────────────────
+  const {
+    dogState: behaviourDogState,
+    notifyInteraction,
+    notifySoundPlayed,
+    notifyMemoryMoment,
+    ready: behaviourReady,
+  } = useBehaviourEngine(dogConfig, profile?.id);
+
+  // ─── Init canvas ───────────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Set canvas resolution
-    const dpr = window.devicePixelRatio || 1;
+    // DPR-aware sizing
+    const dpr  = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
     canvas.width  = rect.width  * dpr;
     canvas.height = rect.height * dpr;
@@ -48,26 +98,53 @@ export default function VirtualDog({
 
     const appearance = buildAppearanceFromConfig(profile, dogConfig);
     initRenderer(canvas, appearance);
+    setQuality(quality);
 
     return () => destroyRenderer();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ─── Update appearance when config changes ────────────────────────────────
+  // ── Quality changes ────────────────────────────────────────────────────────
+  useEffect(() => { setQuality(quality); }, [quality]);
+
+  // ── Appearance updates ─────────────────────────────────────────────────────
   useEffect(() => {
     const appearance = buildAppearanceFromConfig(profile, dogConfig);
     updateAppearance(appearance);
   }, [profile, dogConfig]);
 
-  // ── Sync presenceStateOverride to renderer ──────────────────────────────
+  // ── Cinematic intro ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!showIntro) return;
+    playIntroduction();
+    const t = setTimeout(() => {
+      setIntroComplete(true);
+      onReady?.();
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [showIntro, onReady]);
+
+  // ── Behaviour engine → renderer sync ──────────────────────────────────────
+  // Only applies when no user interaction timer is active
+  useEffect(() => {
+    if (!behaviourReady || !behaviourDogState) return;
+    if (stateTimerRef.current) return; // user interaction takes priority
+    const mapped = DOGSTATE_MAP[behaviourDogState] || DOG_STATES.IDLE;
+    setCurrentState(mapped);
+    setDogState(mapped);
+  }, [behaviourDogState, behaviourReady]);
+
+  // ── Presence override (idle sequence from useEmotionalPresence) ────────────
+  // Lower priority than behaviour engine — only applies if no active interaction
   useEffect(() => {
     if (!presenceStateOverride) return;
-    // Only apply when no active user interaction timer
     if (stateTimerRef.current) return;
+    // Presence hook gives us DOG_STATES strings directly
     setCurrentState(presenceStateOverride);
     setDogState(presenceStateOverride);
   }, [presenceStateOverride]);
 
-  // ─── Transition state ─────────────────────────────────────────────────────
+  // ─── Transition to state (user-triggered — highest priority) ──────────────
   const transitionTo = useCallback((newState, reactionText = '', duration) => {
     if (stateTimerRef.current) clearTimeout(stateTimerRef.current);
     setCurrentState(newState);
@@ -76,102 +153,158 @@ export default function VirtualDog({
     if (reactionText) {
       setReaction(reactionText);
       setShowReaction(true);
-      setTimeout(() => setShowReaction(false), 2200);
+      setTimeout(() => setShowReaction(false), 2400);
     }
 
-    const dur = duration || STATE_DURATION[newState];
+    const dur = duration !== undefined ? duration : STATE_DURATION[newState];
     if (dur) {
       stateTimerRef.current = setTimeout(() => {
-        setCurrentState(DOG_STATES.IDLE);
-        setDogState(DOG_STATES.IDLE);
+        stateTimerRef.current = null;
+        // Return to behaviour-engine-driven state
+        const mapped = DOGSTATE_MAP[behaviourDogState] || DOG_STATES.IDLE;
+        setCurrentState(mapped);
+        setDogState(mapped);
       }, dur);
     }
-  }, []);
+  }, [behaviourDogState]);
 
-  // ─── Handle interaction ───────────────────────────────────────────────────
+  // ─── Interaction handler ──────────────────────────────────────────────────
   const handleInteraction = useCallback((type) => {
     if (!interactive) return;
     onInteraction?.(type);
+    notifyInteraction(type);
 
     switch (type) {
       case INTERACTIONS.PET:
-        transitionTo(DOG_STATES.HAPPY, '🥰 loves this!');
-        break;
+        transitionTo(DOG_STATES.HAPPY, '🥰'); break;
       case INTERACTIONS.THROW_TOY:
-        transitionTo(DOG_STATES.EXCITED, '🎾 fetch!');
-        break;
+        transitionTo(DOG_STATES.EXCITED, '🎾 fetch!'); break;
       case INTERACTIONS.CALL:
-        transitionTo(DOG_STATES.LISTENING, '👂 listening…');
-        break;
+        transitionTo(DOG_STATES.LISTENING, '👂'); break;
       case INTERACTIONS.REWARD:
-        transitionTo(DOG_STATES.EXCITED, '🍖 treat!');
-        break;
+        transitionTo(DOG_STATES.EXCITED, '🍖'); break;
       case INTERACTIONS.CUDDLE:
-        transitionTo(DOG_STATES.HAPPY, '💛 cuddle time!');
-        break;
+        transitionTo(DOG_STATES.HAPPY, '💛'); break;
       case INTERACTIONS.BEDTIME:
-        transitionTo(DOG_STATES.SLEEPING, '😴 goodnight…', 0);
-        break;
+        transitionTo(DOG_STATES.SLEEPING, '😴', 0); break;
       case INTERACTIONS.PLAY:
-        transitionTo(DOG_STATES.PLAYING, '🐾 playtime!');
-        break;
+        transitionTo(DOG_STATES.PLAYING, '🐾'); break;
       default: break;
     }
-  }, [interactive, transitionTo, onInteraction]);
+  }, [interactive, transitionTo, onInteraction, notifyInteraction]);
 
-  // Tap the dog directly
-  const handleCanvasTap = useCallback(() => {
+  // ─── Canvas tap ───────────────────────────────────────────────────────────
+  const handleCanvasTap = useCallback((e) => {
     if (!interactive) return;
-    const reactions = [
-      { state: DOG_STATES.HAPPY,   text: '🥰' },
-      { state: DOG_STATES.WAGGING, text: '🐾 wag!' },
-      { state: DOG_STATES.HAPPY,   text: '💛' },
-    ];
-    const r = reactions[Math.floor(Math.random() * reactions.length)];
-    transitionTo(r.state, r.text);
-  }, [interactive, transitionTo]);
+    e.preventDefault();
+    notifyInteraction('tap');
 
+    const tapReactions = [
+      { state: DOG_STATES.HAPPY,   text: '🥰' },
+      { state: DOG_STATES.WAGGING, text: '🐾' },
+      { state: DOG_STATES.HAPPY,   text: '💛' },
+      { state: DOG_STATES.LISTENING, text: '👀' },
+    ];
+    const r = tapReactions[Math.floor(Math.random() * tapReactions.length)];
+    transitionTo(r.state, r.text);
+  }, [interactive, transitionTo, notifyInteraction]);
+
+  // ─── Pointer/touch tracking (head follow) ────────────────────────────────
+  const handlePointerMove = useCallback((e) => {
+    if (!interactive) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x    = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+    const y    = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+    setPointerPosition(x, y);
+    pointerActive.current = true;
+  }, [interactive]);
+
+  const handlePointerLeave = useCallback(() => {
+    clearPointer();
+    pointerActive.current = false;
+  }, []);
+
+  // Expose notifySoundPlayed / notifyMemoryMoment via ref for parent usage
+  const notifyRef = useRef(null);
+  notifyRef.current = { notifySoundPlayed, notifyMemoryMoment };
+
+  // Cleanup
   useEffect(() => () => {
     if (stateTimerRef.current) clearTimeout(stateTimerRef.current);
   }, []);
+
+  // ─── Interaction bar proxy (called by ImmorTailPage) ─────────────────────
+  // Exposed as prop callback so parent can trigger interactions
+  useEffect(() => {
+    if (typeof onInteraction === 'function') {
+      // Attach a proxy so parent can call handleInteraction via ref
+    }
+  }, [onInteraction]);
 
   return (
     <div className={`relative ${className}`}>
       {/* Canvas */}
       <canvas
         ref={canvasRef}
-        className="w-full h-full cursor-pointer"
+        className="w-full h-full cursor-pointer select-none"
         style={{ touchAction: 'none' }}
         onClick={handleCanvasTap}
-        onTouchEnd={handleCanvasTap}
+        onMouseMove={handlePointerMove}
+        onTouchMove={handlePointerMove}
+        onMouseLeave={handlePointerLeave}
+        onTouchEnd={(e) => { handleCanvasTap(e); handlePointerLeave(); }}
         role="img"
-        aria-label={`Virtual dog: ${profile?.name || 'your dog'}`}
+        aria-label={`${profile?.name || 'Your dog'}'s virtual companion`}
       />
 
       {/* Reaction bubble */}
       <AnimatePresence>
         {showReaction && (
           <motion.div
-            initial={{ opacity: 0, y: 10, scale: 0.8 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="absolute top-4 left-1/2 -translate-x-1/2 bg-immortail-deep/80 backdrop-blur-sm
-                       px-4 py-2 rounded-full text-sm font-medium text-immortail-gold border border-immortail-gold/30
-                       pointer-events-none whitespace-nowrap"
+            key="reaction"
+            initial={{ opacity: 0, y: 12, scale: 0.75 }}
+            animate={{ opacity: 1, y: 0,  scale: 1    }}
+            exit={{    opacity: 0, y: -8, scale: 0.9  }}
+            transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+            className="absolute top-3 left-1/2 -translate-x-1/2
+                       bg-immortail-deep/85 backdrop-blur-sm
+                       px-4 py-2 rounded-full text-sm font-medium
+                       text-immortail-gold border border-immortail-gold/25
+                       pointer-events-none whitespace-nowrap shadow-lg"
           >
             {reaction}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* State label */}
-      {currentState !== DOG_STATES.IDLE && (
-        <div className="absolute bottom-2 left-1/2 -translate-x-1/2">
-          <span className="text-xs text-immortail-soft/60 bg-black/30 px-2 py-0.5 rounded-full">
-            {currentState}
-          </span>
-        </div>
-      )}
+      {/* Subtle state indicator — only for non-idle states */}
+      <AnimatePresence>
+        {currentState !== DOG_STATES.IDLE && currentState !== DOG_STATES.SITTING && (
+          <motion.div
+            key={currentState}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{    opacity: 0        }}
+            transition={{ duration: 0.4 }}
+            className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-none"
+          >
+            <span className="text-[10px] text-immortail-soft/50 bg-black/20 px-2 py-0.5 rounded-full tracking-wide">
+              {currentState}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
+}
+
+// Re-export notify functions for parent components to call
+// (via a forwarded ref or by passing as props — see ImmorTailPage)
+export function createDogInteractionProxy(virtualDogRef) {
+  return {
+    notifySoundPlayed:  () => virtualDogRef.current?.notifySoundPlayed?.(),
+    notifyMemoryMoment: () => virtualDogRef.current?.notifyMemoryMoment?.(),
+  };
 }
