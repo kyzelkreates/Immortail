@@ -207,6 +207,65 @@
   to   { opacity: 1; }
 }
 
+
+/* ─── Premium micro-details ─────────────────────────────────────────────────── */
+
+/* Glowing gold input focus */
+.input-field:focus {
+  box-shadow: 0 0 0 1px rgba(201,168,76,0.35), 0 4px 16px rgba(201,168,76,0.08);
+}
+
+/* Warm card hover glow */
+.glass-card:hover {
+  box-shadow: 0 8px 32px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.10),
+              0 0 0 1px rgba(201,168,76,0.06);
+}
+
+/* Gold text shimmer helper */
+.shimmer-gold {
+  background: linear-gradient(90deg, #9A7A2E 0%, #C9A84C 35%, #E5C97A 50%, #C9A84C 65%, #9A7A2E 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: goldShimmer 3.5s ease-in-out infinite;
+}
+
+/* Warm line */
+.warm-line {
+  width: 40px; height: 2px;
+  background: linear-gradient(90deg, #C9A84C, #E5C97A, #C9A84C);
+  border-radius: 2px;
+  margin: 0 auto;
+}
+
+/* Typography */
+.font-display { font-family: 'Playfair Display', Georgia, serif; }
+
+/* Letter spacing for taglines */
+.tracking-widest-display { letter-spacing: 0.15em; }
+
+/* Smoother page transitions */
+.page-transition {
+  animation: fadeInUp 0.35s ease-out both;
+}
+
+@keyframes breathPulse {
+  0%,100% { opacity: 0.6; transform: scale(0.98); }
+  50%      { opacity: 1; transform: scale(1.02); }
+}
+
+/* Selection gold */
+::selection {
+  background: rgba(201,168,76,0.25);
+  color: #F5EDD8;
+}
+
+/* Tap highlight colour on mobile */
+* {
+  -webkit-tap-highlight-color: rgba(201,168,76,0.12);
+}
+
 /* ─── PWA / Mobile tweaks ───────────────────────────────────────────────────── */
 @media (display-mode: standalone) {
   body { user-select: none; -webkit-user-select: none; }
