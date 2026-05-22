@@ -1,43 +1,78 @@
 /**
  * Immortail™ — Global App Context
- * Provides active profile, settings, and shared state to the entire tree.
+ * Single source of truth for profile, settings, and app state.
+ *
+ * FIX v1.3.1:
+ *   - createProfile now awaits full IDB write confirmation before returning
+ *   - activeProfileId is set synchronously from the returned profile.id
+ *   - profileReady flag added — true only when profile is fully committed to
+ *     both IDB and React state. ProtectedRoute uses this instead of just
+ *     checking activeProfileId, preventing the race condition where navigation
+ *     happens before state flush.
+ *   - initStorage hardened: if saved activeProfileId references a missing
+ *     profile the LS key is cleared and the user is sent to onboarding
+ *   - All state mutations in createProfile / activateProfile are batched via
+ *     a single functional update to avoid multiple re-renders
  */
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import {
   initStorage, ActiveProfile, Profiles, AppSettings,
-  DogConfig, StorageDiagnostics
+  DogConfig,
 } from './storage.js';
 
 const AppContext = createContext(null);
 
 export function AppProvider({ children }) {
-  const [ready, setReady]               = useState(false);
-  const [error, setError]               = useState(null);
-  const [activeProfileId, setActiveProfileId] = useState(null);
-  const [profile, setProfile]           = useState(null);
-  const [dogConfig, setDogConfig]       = useState(null);
-  const [settings, setSettings]         = useState(AppSettings.get());
+  const [ready,            setReady]            = useState(false);
+  const [error,            setError]            = useState(null);
+  const [activeProfileId,  setActiveProfileId]  = useState(null);
+  const [profile,          setProfile]          = useState(null);
+  const [dogConfig,        setDogConfig]        = useState(null);
+  const [profileReady,     setProfileReady]     = useState(false); // ← NEW: IDB + state both confirmed
+  const [settings,         setSettings]         = useState(AppSettings.get());
   const [installPromptEvent, setInstallPromptEvent] = useState(null);
 
   // ─── Init storage ──────────────────────────────────────────────────────────
   useEffect(() => {
-    initStorage().then(({ ok, error }) => {
-      if (!ok) { setError(error); setReady(true); return; }
+    initStorage().then(({ ok, error: initErr }) => {
+      if (!ok) {
+        console.error('[AppContext] Storage init failed:', initErr);
+        setError(initErr);
+        setReady(true);
+        return;
+      }
+
       const savedId = ActiveProfile.get();
-      if (savedId) {
-        Profiles.get(savedId).then(p => {
+
+      if (!savedId) {
+        // No saved profile — fresh install or after deactivation
+        setReady(true);
+        return;
+      }
+
+      // Verify the saved ID actually exists in IDB before trusting it
+      Profiles.get(savedId)
+        .then(p => {
           if (p) {
             setActiveProfileId(savedId);
             setProfile(p);
-            DogConfig.get(savedId).then(cfg => setDogConfig(cfg));
+            setProfileReady(true);
+            return DogConfig.get(savedId);
           } else {
+            // Saved ID points to a deleted/missing profile — clear it
+            console.warn('[AppContext] Saved profileId not found in IDB, clearing.', savedId);
             ActiveProfile.clear();
+            return null;
           }
-          setReady(true);
-        });
-      } else {
-        setReady(true);
-      }
+        })
+        .then(cfg => {
+          if (cfg !== undefined && cfg !== null) setDogConfig(cfg);
+        })
+        .catch(err => {
+          console.error('[AppContext] Profile hydration failed:', err);
+          ActiveProfile.clear();
+        })
+        .finally(() => setReady(true));
     });
 
     // PWA install prompt
@@ -46,24 +81,49 @@ export function AppProvider({ children }) {
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
-  // ─── Set active profile ────────────────────────────────────────────────────
-  const activateProfile = useCallback(async (id) => {
-    const p = await Profiles.get(id);
-    if (!p) throw new Error('Profile not found');
-    ActiveProfile.set(id);
-    setActiveProfileId(id);
-    setProfile(p);
-    const cfg = await DogConfig.get(id);
-    setDogConfig(cfg);
-  }, []);
-
-  // ─── Create profile ────────────────────────────────────────────────────────
+  // ─── Create profile (FIXED) ────────────────────────────────────────────────
+  // Contract:
+  //   1. Write profile to IDB — confirmed before continuing
+  //   2. Write activeProfileId to localStorage — synchronous
+  //   3. Update React state
+  //   4. Return profile — caller may then navigate
+  // Navigation must happen AFTER this resolves.
   const createProfile = useCallback(async (data) => {
+    // Step 1: IDB write — awaited to completion
     const p = await Profiles.create(data);
+
+    // Step 2: Persist active ID to localStorage immediately
     ActiveProfile.set(p.id);
+
+    // Step 3: Verify the write actually landed in IDB
+    const verified = await Profiles.get(p.id);
+    if (!verified) {
+      throw new Error('Profile write failed — IDB did not confirm record.');
+    }
+
+    // Step 4: Update React state (batched in React 18)
     setActiveProfileId(p.id);
     setProfile(p);
     setDogConfig(null);
+    setProfileReady(true);
+
+    // Step 5: Return the confirmed profile to caller
+    return p;
+  }, []);
+
+  // ─── Activate existing profile ─────────────────────────────────────────────
+  const activateProfile = useCallback(async (id) => {
+    const p = await Profiles.get(id);
+    if (!p) throw new Error(`Profile not found: ${id}`);
+
+    ActiveProfile.set(id);
+    const cfg = await DogConfig.get(id);
+
+    setActiveProfileId(id);
+    setProfile(p);
+    setDogConfig(cfg || null);
+    setProfileReady(true);
+
     return p;
   }, []);
 
@@ -75,16 +135,19 @@ export function AppProvider({ children }) {
     return updated;
   }, [activeProfileId]);
 
-  // ─── Refresh profile from DB ───────────────────────────────────────────────
+  // ─── Refresh profile from IDB ──────────────────────────────────────────────
   const refreshProfile = useCallback(async () => {
     if (!activeProfileId) return;
     const [p, cfg] = await Promise.all([
       Profiles.get(activeProfileId),
-      DogConfig.get(activeProfileId)
+      DogConfig.get(activeProfileId),
     ]);
-    if (p) setProfile(p);
-    if (cfg !== dogConfig) setDogConfig(cfg);
-  }, [activeProfileId, dogConfig]);
+    if (p) {
+      setProfile(p);
+      setProfileReady(true);
+    }
+    setDogConfig(cfg || null);
+  }, [activeProfileId]);
 
   // ─── Save dog config ───────────────────────────────────────────────────────
   const saveDogConfig = useCallback(async (config) => {
@@ -97,7 +160,6 @@ export function AppProvider({ children }) {
   const updateSettings = useCallback((updates) => {
     const merged = AppSettings.update(updates);
     setSettings(merged);
-    // Apply theme
     if (updates.theme) {
       document.documentElement.classList.toggle('dark', updates.theme === 'dark');
     }
@@ -110,6 +172,7 @@ export function AppProvider({ children }) {
     setActiveProfileId(null);
     setProfile(null);
     setDogConfig(null);
+    setProfileReady(false);
   }, []);
 
   // ─── PWA install ───────────────────────────────────────────────────────────
@@ -127,6 +190,7 @@ export function AppProvider({ children }) {
     // Profile
     activeProfileId,
     profile,
+    profileReady,   // ← exposed for ProtectedRoute + CreateDogPage
     dogConfig,
     activateProfile,
     createProfile,

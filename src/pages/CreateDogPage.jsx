@@ -81,7 +81,7 @@ const INITIAL_FORM = {
 
 export default function CreateDogPage() {
   const navigate          = useNavigate();
-  const { createProfile } = useApp();
+  const { createProfile, profileReady } = useApp();
   const [step, setStep]   = useState(0);
   const [form, setForm]   = useState(INITIAL_FORM);
   const [saving, setSaving] = useState(false);
@@ -128,10 +128,16 @@ export default function CreateDogPage() {
   const handleSkip = () => go(1);
   const handleBack = () => step === 0 ? navigate(ROUTES.HOME) : go(-1);
 
+  // Track whether we've triggered navigation so we don't double-navigate
+  const navigatedRef = useRef(false);
+
   const handleCreate = async () => {
     setSaving(true);
+    setError('');
+    navigatedRef.current = false;
     try {
-      await createProfile({
+      // Step 1: Write to IDB + update React state (createProfile awaits both)
+      const profile = await createProfile({
         name:             form.name.trim(),
         breed:            form.breed || null,
         age:              form.age ? parseInt(form.age, 10) : null,
@@ -142,10 +148,25 @@ export default function CreateDogPage() {
         ownerName:        form.ownerName.trim(),
         tribute:          form.tribute.trim(),
       });
+
+      // Step 2: Guard — confirm we actually got a profile back
+      if (!profile?.id) throw new Error('Profile creation returned no ID.');
+
+      // Step 3: Mark onboarding done
       Onboarding.markDone();
+
+      // Step 4: Navigate — createProfile has already confirmed IDB write
+      //         and set profileReady=true in context, so ProtectedRoute will pass
+      navigatedRef.current = true;
       navigate(ROUTES.DASHBOARD, { replace: true });
-    } catch {
-      setError('Something went wrong. Please try again.');
+
+    } catch (err) {
+      console.error('[CreateDogPage] Profile creation failed:', err);
+      setError(
+        err?.message?.includes('IDB')
+          ? 'Could not save to device storage. Please try again.'
+          : 'Something went wrong creating the profile. Please try again.'
+      );
       setSaving(false);
     }
   };
