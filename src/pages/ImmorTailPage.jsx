@@ -70,6 +70,26 @@ export default function ImmorTailPage() {
   // ── Ambient voice ────────────────────────────────────────────────────────
   const { speak } = useAmbientVoice({ enabled: soundEnabled && settings?.ambientSoundEnabled });
 
+  // ── Companion rituals ────────────────────────────────────────────────────
+  // FIX: hooks were imported but never destructured — caused ReferenceErrors
+  // that triggered GlobalErrorBoundary redirect to home on every page load.
+  const {
+    rituals,
+    suggestedRitual,
+    startRitual,
+    stopRitual,
+    activeRitual,
+    logEnv,
+  } = useCompanionRituals(activeProfileId);
+
+  // ── Quiet companion ──────────────────────────────────────────────────────
+  const {
+    quietMode,
+    activateQuiet,
+    deactivateQuiet,
+    quietDurationLabel,
+  } = useQuietCompanion();
+
   // ── Set initial env from time of day (once) ───────────────────────────────
   useEffect(() => {
     setEnvMode(getAutoEnvMode());
@@ -98,7 +118,8 @@ export default function ImmorTailPage() {
     setEnvMode(prev => {
       const idx  = ENV_CYCLE.indexOf(prev);
       const next = ENV_CYCLE[(idx + 1) % ENV_CYCLE.length];
-      logEnv(next);
+      // FIX: logEnv is now a hook fn — call outside setEnvMode updater (no state calls inside updater)
+      setTimeout(() => logEnv(next), 0);
       return next;
     });
   };
@@ -183,11 +204,12 @@ export default function ImmorTailPage() {
     }
   }, [startRitual, setEnvMode, logEnv, speak, profile]);
 
-  // Rebuild dog AI — fixed: try/catch/finally, duplicate guard, task manager
+  // Rebuild dog AI — fixed: try/catch/finally, task manager integration
   const handleRebuild = useCallback(async () => {
-    if (isTaskActive()) return; // duplicate execution guard
+    if (reconstructing) return; // guard against double-click (button disabled handles this too)
 
     const dogName = profile?.name || 'companion';
+    // createTask returns existing if already active — use duplicate flag to avoid double work
     const { id, duplicate } = createTask('RECONSTRUCT', `Reconstructing ${dogName}`);
     if (duplicate) return;
 
@@ -310,7 +332,7 @@ export default function ImmorTailPage() {
           </div>
           <button
             onClick={handleRebuild}
-            disabled={aiStatus === 'loading' || reconstructing}
+            disabled={reconstructing}
             className="btn-primary text-xs px-3 py-2 shrink-0"
           >
             Build
@@ -557,7 +579,7 @@ export default function ImmorTailPage() {
 
                 <button
                   onClick={handleRebuild}
-                  disabled={reconstructing || aiStatus === 'loading'}
+                  disabled={reconstructing}
                   className="btn-ghost w-full text-sm py-2.5 disabled:opacity-40"
                 >
                   {reconstructing ? '⏳ Rebuilding…' : '🔄 Rebuild Personality'}

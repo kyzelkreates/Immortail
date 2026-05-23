@@ -36,8 +36,10 @@ export function useAIEngine(profileId, profile) {
     });
   }, [profileId]);
 
-  const rebuild = useCallback(async () => {
-    if (!profileId || !profile) return;
+  // FIX: accept optional onProgress callback so callers (ImmorTailPage)
+  // can receive step updates for the aiTaskManager overlay.
+  const rebuild = useCallback(async (onProgress) => {
+    if (!profileId || !profile) return null;
     setReconstructing(true);
     setError(null);
     setProgress({ step: 'starting', pct: 0 });
@@ -45,6 +47,7 @@ export function useAIEngine(profileId, profile) {
     try {
       const result = await reconstructDog(profileId, profile, (p) => {
         if (mountedRef.current) setProgress(p);
+        try { onProgress?.(p); } catch {} // forward to caller; never let it crash pipeline
       });
       if (mountedRef.current) {
         setConfig(result);
