@@ -34,14 +34,15 @@ export default class GlobalErrorBoundary extends Component {
     console.error('[Immortail] Render error caught by boundary:', error);
     console.error('[Immortail] Component stack:', info?.componentStack);
 
-    // Auto-recover after 2.5s — navigate to safe route
+    // Auto-recover after 8s — gives user time to read the error and retry
+    // Longer window prevents "flash to home" on transient errors
     this._recoveryTimer = setTimeout(() => {
       this.setState({ recovering: true });
       // Hard navigate — clears all React state, starts fresh at landing
       setTimeout(() => {
         window.location.href = SAFE_ROUTE;
       }, 600); // brief pause so "recovering" animation plays
-    }, 2500);
+    }, 8000);
   }
 
   componentWillUnmount() {
@@ -115,6 +116,12 @@ export default class GlobalErrorBoundary extends Component {
           {recovering
             ? 'Returning to a safe screen.'
             : 'Something interrupted the experience. Your memories are safe.'}
+        {/* Show error detail in dev mode only */}
+        {!recovering && errorMsg && typeof __IS_PROD__ !== 'undefined' && !__IS_PROD__ && (
+          <p style={{ fontSize: '0.7rem', color: 'rgba(255,100,100,0.5)', marginTop: '0.5rem', fontFamily: 'monospace' }}>
+            {errorMsg}
+          </p>
+        )}
         </p>
 
         {/* Progress bar that fills during auto-recovery */}

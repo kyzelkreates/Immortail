@@ -265,16 +265,26 @@ export async function reconstructDog(profileId, profile, onProgress) {
     MemoryEntries.listByProfile(profileId),
   ]);
 
-  // 2. Analyse images
+  // 2. Analyse images (with 8s graceful timeout — BUILD_DOG_CONFIG works without images)
   emit('analysing images', 20);
   let imageAnalysis = await AICache.get(profileId, AI_ANALYSIS.PHOTO);
   if (!imageAnalysis && photos.length > 0) {
     try {
-      if (_status !== 'ready') await waitForReady();
-      imageAnalysis = await analysePhotoBatch(photos);
-      if (imageAnalysis) await AICache.save(profileId, AI_ANALYSIS.PHOTO, imageAnalysis);
+      // Wait up to 8s for AI model — don't block entire pipeline on CDN load
+      if (_status !== 'ready') {
+        await Promise.race([
+          waitForReady(8000),
+          new Promise(resolve => setTimeout(resolve, 8000)), // graceful timeout — continues without AI
+        ]);
+      }
+      if (_status === 'ready') {
+        imageAnalysis = await analysePhotoBatch(photos);
+        if (imageAnalysis) await AICache.save(profileId, AI_ANALYSIS.PHOTO, imageAnalysis);
+      } else {
+        console.log('[AI] Image analysis skipped — AI model not ready (proceeding with profile data)');
+      }
     } catch (e) {
-      console.warn('[AI] Image analysis failed:', e.message);
+      console.warn('[AI] Image analysis failed (non-fatal — proceeding without it):', e.message);
     }
   }
 
@@ -289,17 +299,79 @@ export async function reconstructDog(profileId, profile, onProgress) {
     }
   }
 
-  // 4. Build config
+  // 4. Build config (try worker first, fall back to inline if unavailable)
   emit('building personality', 75);
-  const config = await send('BUILD_DOG_CONFIG', {
-    profile,
-    imageAnalysis,
-    soundAnalysis,
-    memories,
-  });
+  let config = null;
+  try {
+    config = await send('BUILD_DOG_CONFIG', {
+      profile,
+      imageAnalysis,
+      soundAnalysis,
+      memories,
+    });
+  } catch (e) {
+    console.warn('[AI] Worker unavailable for config build — using inline fallback:', e.message);
+    // Inline fallback — same logic as the worker's buildDogConfig
+    config = buildDogConfigInline({ profile, imageAnalysis, soundAnalysis, memories });
+  }
 
   emit('done', 100);
   return config;
+}
+
+// ─── Inline config builder (main-thread fallback) ────────────────────────────
+// Called only when the worker is unavailable.
+// Produces a valid config from profile data alone (no image analysis needed).
+function buildDogConfigInline({ profile, imageAnalysis, soundAnalysis, memories }) {
+  const breed = (profile?.breed || '').toLowerCase();
+  const traits = profile?.traits || [];
+
+  // Colour
+  const colourHex = imageAnalysis?.dominantHex || '#C9A84C';
+
+  // Ear/body from breed (simplified)
+  const floppy  = ['labrador','golden','cocker','basset','beagle','cavalier','springer'].some(b => breed.includes(b));
+  const compact  = ['pug','bulldog','french','chihuahua','shih tzu','pomeranian','corgi'].some(b => breed.includes(b));
+  const large    = ['german','rottweiler','husky','malamute','doberman','great','saint'].some(b => breed.includes(b));
+
+  const isPlayful    = traits.includes('playful')    || traits.includes('energetic');
+  const isCalm       = traits.includes('calm')       || traits.includes('gentle');
+  const isCuddly     = traits.includes('cuddly');
+  const isProtective = traits.includes('protective');
+
+  return {
+    version:     '1.0',
+    generatedAt: Date.now(),
+    profileId:   profile?.id,
+    appearance: {
+      bodyColour:  colourHex,
+      earColour:   colourHex,
+      tailColour:  colourHex,
+      bellyColour: '#F5E6C8',
+      earShape:    floppy ? 'floppy' : 'pointy',
+      bodyShape:   compact ? 'compact' : large ? 'large' : 'medium',
+      tailShape:   'curved',
+      size:        compact ? 0.75 : large ? 1.25 : 1.0,
+    },
+    personality: {
+      tailWagSpeed:     isPlayful ? 'fast' : isCalm ? 'slow' : 'medium',
+      excitementFreq:   isPlayful ? 'high' : isCalm ? 'low'  : 'medium',
+      interactionDelay: isCalm ? 800 : isPlayful ? 200 : 400,
+      cuddleResponse:   isCuddly ? 'strong' : 'normal',
+      alertResponse:    isProtective ? 'strong' : 'normal',
+    },
+    sound: soundAnalysis ? {
+      barkPitch:     soundAnalysis.estimatedHz   || 440,
+      barkIntensity: soundAnalysis.intensity      || 0.5,
+      emotionalTone: soundAnalysis.tone           || 'calm',
+      barkType:      soundAnalysis.barkType       || 'single_bark',
+    } : null,
+    memoryTags:  [],
+    breed:       profile?.breed,
+    favouriteToy:      profile?.favouriteToy,
+    favouriteCommand:  profile?.favouriteCommand,
+    _generatedInline:  true, // flag for diagnostics
+  };
 }
 
 // ─── Sound aggregate ──────────────────────────────────────────────────────────

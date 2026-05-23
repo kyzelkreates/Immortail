@@ -1,5 +1,5 @@
 // Immortail™ Service Worker v1.0.0
-const CACHE_VERSION = 'immortail-v1';
+const CACHE_VERSION = 'immortail-v3'; // v3: navigate fix + AI fallback
 const STATIC_CACHE  = `${CACHE_VERSION}-static`;
 const MEDIA_CACHE   = `${CACHE_VERSION}-media`;
 const AI_CACHE      = `${CACHE_VERSION}-ai`;

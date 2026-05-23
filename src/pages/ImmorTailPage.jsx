@@ -8,7 +8,7 @@ import { useApp } from '../core/AppContext.jsx';
 import { useAIEngine } from '../hooks/useAIEngine.js';
 import { Sounds } from '../core/storage.js';
 import { playBlob } from '../audio/audioEngine.js';
-import { ENV_MODES, INTERACTIONS, DOG_STATES } from '../core/constants.js';
+import { ENV_MODES, INTERACTIONS, DOG_STATES, getAutoEnvMode, ROUTES } from '../core/constants.js';
 import VirtualDog           from '../virtualdog/VirtualDog.jsx';
 import MemoryEnvironment    from '../environment/MemoryEnvironment.jsx';
 import InteractionBar       from '../interaction/InteractionBar.jsx';
@@ -20,7 +20,7 @@ import { useEmotionalPresence }   from '../hooks/useEmotionalPresence.js';
 import { useMemoryMoments }       from '../hooks/useMemoryMoments.js';
 import { usePerformanceGovernor } from '../hooks/usePerformanceGovernor.js';
 import { useAmbientVoice }        from '../hooks/useAmbientVoice.js';
-import { getAutoEnvMode, ROUTES }   from '../core/constants.js';
+
 import { useNavigate }                from 'react-router-dom';
 import {
   createTask, updateProgress, completeTask, failTask,
@@ -252,6 +252,19 @@ export default function ImmorTailPage() {
   // Track previous config to detect intro moment (must be AFTER activeConfig declaration)
   useEffect(() => { prevConfigRef.current = activeConfig; }, [activeConfig]);
   const dogName      = profile?.name || 'Your dog';
+
+  // Guard: if profile not yet loaded, show loading state instead of crashing
+  // (can happen briefly during navigation before AppContext state flush)
+  if (!activeProfileId) {
+    return (
+      <div className="min-h-screen bg-immortail-deep flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="text-4xl animate-pulse">🐾</div>
+          <p className="text-immortail-soft text-sm">Loading companion…</p>
+        </div>
+      </div>
+    );
+  }
   const ENV_ICONS = {
     [ENV_MODES.DAY]:      '☀️',
     [ENV_MODES.DUSK]:     '🌅',
