@@ -2,11 +2,21 @@
  * Immortail™ — AI Web Worker
  * ALL AI inference runs here — never blocks the UI thread.
  * Uses TensorFlow.js with MobileNet for image feature extraction.
+ *
+ * Graceful degradation: if CDN scripts fail to load (network or CORS),
+ * the worker continues in degraded mode — BUILD_DOG_CONFIG still works,
+ * image analysis returns null (app handles this gracefully).
  */
 
-// Import TF.js inside worker
-importScripts('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js');
-importScripts('https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js');
+// Load TF.js from CDN — wrapped so a CDN failure doesn't crash the whole worker
+let _tfAvailable = false;
+try {
+  importScripts('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js');
+  importScripts('https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js');
+  _tfAvailable = true;
+} catch (e) {
+  console.warn('[AIWorker] TF.js CDN load failed — running in degraded mode:', e.message);
+}
 
 let mobilenetModel = null;
 let modelLoading   = false;
@@ -19,17 +29,31 @@ self.onmessage = async (e) => {
   try {
     switch (type) {
       case 'LOAD_MODEL':
+        if (!_tfAvailable) {
+          // Degraded mode — AI image analysis unavailable but config build works
+          self.postMessage({ type: 'MODEL_LOADED', id });
+          break;
+        }
         await loadModel();
         self.postMessage({ type: 'MODEL_READY', id });
         break;
 
       case 'ANALYSE_IMAGE':
-        if (!modelReady) await loadModel();
+        if (!_tfAvailable || !modelReady) {
+          // Degraded mode — return null so pipeline skips image analysis
+          self.postMessage({ type: 'IMAGE_RESULT', id, result: null });
+          break;
+        }
         const imgResult = await analyseImage(payload.imageData, payload.width, payload.height);
         self.postMessage({ type: 'IMAGE_RESULT', id, result: imgResult });
         break;
 
       case 'ANALYSE_IMAGES_BATCH':
+        if (!_tfAvailable) {
+          // Degraded mode — return null so pipeline uses profile data only
+          self.postMessage({ type: 'BATCH_RESULT', id, result: null });
+          break;
+        }
         if (!modelReady) await loadModel();
         const batchResult = await analyseImagesBatch(payload.images);
         self.postMessage({ type: 'BATCH_RESULT', id, result: batchResult });

@@ -37,7 +37,13 @@ export function initAI() {
       _pending.clear();
     };
     setStatus('loading');
-    send('LOAD_MODEL', {}).then(() => setStatus('ready')).catch(() => setStatus('error'));
+    // LOAD_MODEL result comes via MODEL_LOADED/MODEL_READY broadcast (no id match needed)
+    // We listen for the status change instead of using the pending promise
+    send('LOAD_MODEL', {}).catch(() => {
+      // If send itself throws (worker not available), go to error
+      // MODEL_LOADED/MODEL_READY broadcasts handle the success path
+      if (_status === 'loading') setStatus('error');
+    });
   } catch (e) {
     console.warn('[AI] Worker init failed (will run in degraded mode):', e.message);
     setStatus('error');
@@ -55,6 +61,7 @@ function handleWorkerMessage({ data }) {
   const { type, id, result, error } = data;
   if (type === 'MODEL_LOADING') { setStatus('loading'); return; }
   if (type === 'MODEL_LOADED')  { setStatus('ready');   return; }
+  if (type === 'MODEL_READY')   { setStatus('ready');   return; } // degraded mode ack
 
   const pending = _pending.get(id);
   if (!pending) return;
