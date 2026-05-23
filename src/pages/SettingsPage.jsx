@@ -9,11 +9,86 @@ import {
   StorageDiagnostics, ProfileIO, AppSettings,
   AICache, AIModels, Profiles, ActiveProfile
 } from '../core/storage.js';
+import { isProviderAvailable, listModels, resetOllamaCache } from '../services/ollamaClient.js';
 import { useAIEngine } from '../hooks/useAIEngine.js';
 import { IS_PROD, ROUTES } from '../core/constants.js';
 import PageHeader from '../components/ui/PageHeader.jsx';
 import NavBar        from '../components/ui/NavBar.jsx';
 import { BackupEngine } from '../migration/BackupEngine.js';
+
+// ─── AI provider definitions ─────────────────────────────────────────────────
+const AI_PROVIDERS = [
+  {
+    id:     'offline',
+    emoji:  '🔒',
+    label:  'Offline',
+    desc:   'Built-in rule engine. No install needed.',
+    port:   null,
+    url:    null,
+    about:  "Always works — no internet, no local server. Immortail's built-in companion engine handles all responses.",
+    models: null,
+  },
+  {
+    id:     'ollama',
+    emoji:  '🦙',
+    label:  'Ollama',
+    desc:   'Run llama3, Mistral, Gemma, Phi locally.',
+    port:   'localhost:11434',
+    url:    'https://ollama.com',
+    about:  'The most popular local AI runner. Supports hundreds of open-source models. Simple one-command install on Mac, Windows, and Linux.',
+    models: 'llama3, mistral, gemma:2b, phi3, codellama',
+  },
+  {
+    id:     'lmstudio',
+    emoji:  '🎛️',
+    label:  'LM Studio',
+    desc:   'GUI app for running any GGUF model.',
+    port:   'localhost:1234/v1',
+    url:    'https://lmstudio.ai',
+    about:  'Desktop app with a model browser and built-in OpenAI-compatible server. Great for beginners — no command line needed.',
+    models: 'Mistral 7B, Llama 3, Phi-3, Qwen2',
+  },
+  {
+    id:     'gpt4all',
+    emoji:  '🧠',
+    label:  'GPT4All',
+    desc:   'Privacy-focused local AI from Nomic.',
+    port:   'localhost:4891/v1',
+    url:    'https://gpt4all.io',
+    about:  'Open-source, runs fully offline. Built for privacy. Includes a nice desktop chat UI and an OpenAI-compatible local server.',
+    models: 'Mistral, Llama 3, Falcon, MPT',
+  },
+  {
+    id:     'jan',
+    emoji:  '🌙',
+    label:  'Jan',
+    desc:   'Open-source ChatGPT alternative.',
+    port:   'localhost:1337/v1',
+    url:    'https://jan.ai',
+    about:  'Beautiful, fully offline AI assistant. Runs models locally via an OpenAI-compatible API. Great UX, strong privacy focus.',
+    models: 'Mistral 7B, Llama 3, Gemma, TinyLlama',
+  },
+  {
+    id:     'openwebui',
+    emoji:  '🌐',
+    label:  'Open WebUI',
+    desc:   'Web front-end for Ollama models.',
+    port:   'localhost:3000',
+    url:    'https://openwebui.com',
+    about:  'A powerful self-hosted web UI that runs on top of Ollama. If you already have Open WebUI running, point Immortail at it.',
+    models: 'All Ollama-compatible models',
+  },
+  {
+    id:     'custom',
+    emoji:  '⚙️',
+    label:  'Custom',
+    desc:   'Any OpenAI-compatible endpoint.',
+    port:   'your-url/v1',
+    url:    null,
+    about:  'Connect any OpenAI-compatible API. Enter your server URL and an optional bearer token. Works with self-hosted or remote servers.',
+    models: null,
+  },
+];
 
 export default function SettingsPage({ onOpenRestore }) {
   const navigate                    = useNavigate();
@@ -27,7 +102,12 @@ export default function SettingsPage({ onOpenRestore }) {
   const [backingUp, setBackingUp]     = useState(false);
   const [backupDone, setBackupDone]   = useState(false);
   const [confirm, setConfirm]     = useState(null); // confirm dialog type
-  const [section, setSection]     = useState('general'); // 'general' | 'diagnostics' | 'danger'
+  const [section, setSection]     = useState('general'); // 'general' | 'ai' | 'comfort' | 'diagnostics' | 'danger'
+
+  // ── AI provider state ─────────────────────────────────────────────────────
+  const [aiProbeStatus,  setAiProbeStatus]  = useState('idle'); // 'idle' | 'checking' | 'ok' | 'fail'
+  const [detectedModels, setDetectedModels] = useState([]);
+  const [aiProbeMsg,     setAiProbeMsg]     = useState('');
 
   const loadStats = useCallback(async () => {
     if (!activeProfileId) return;
@@ -36,6 +116,29 @@ export default function SettingsPage({ onOpenRestore }) {
   }, [activeProfileId]);
 
   useEffect(() => { loadStats(); }, [loadStats]);
+
+  // ─── AI provider test ────────────────────────────────────────────────────────
+  const handleTestProvider = useCallback(async () => {
+    setAiProbeStatus('checking');
+    setDetectedModels([]);
+    setAiProbeMsg('');
+    resetOllamaCache(); // force fresh ping
+
+    const { available, latencyMs, provider } = await isProviderAvailable();
+    if (available) {
+      const models = await listModels();
+      setAiProbeStatus('ok');
+      setDetectedModels(models);
+      setAiProbeMsg(
+        models.length > 0
+          ? `${provider} connected · ${latencyMs}ms · ${models.length} model${models.length !== 1 ? 's' : ''} found`
+          : `${provider} connected · ${latencyMs}ms · no models detected yet`,
+      );
+    } else {
+      setAiProbeStatus('fail');
+      setAiProbeMsg('Could not connect — is the AI runtime running?');
+    }
+  }, []);
 
   // ─── Export profile ────────────────────────────────────────────────────────
   const handleExport = async () => {
@@ -127,6 +230,7 @@ export default function SettingsPage({ onOpenRestore }) {
 
   const SECTIONS = [
     { id: 'general',     label: '⚙️ General'    },
+    { id: 'ai',          label: '🤖 AI'          },
     { id: 'comfort',     label: '🕊️ Comfort'    },
     { id: 'diagnostics', label: '📊 Diagnostics' },
     { id: 'danger',      label: '⚠️ Data'        },
@@ -262,6 +366,201 @@ export default function SettingsPage({ onOpenRestore }) {
                   />
                 </label>
               </div>
+            </motion.div>
+          )}
+
+          {/* ── AI Agents ── */}
+          {section === 'ai' && (
+            <motion.div key="ai" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3">
+
+              {/* Header card */}
+              <div className="glass-card-warm p-4 rounded-2xl space-y-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xl">🤖</span>
+                  <div>
+                    <p className="text-sm font-medium text-immortail-cream">AI Agents</p>
+                    <p className="text-xs text-immortail-soft">Choose your local AI runtime</p>
+                  </div>
+                </div>
+                <p className="text-xs text-immortail-soft/70 leading-relaxed">
+                  Immortail works offline with its built-in rule engine. Connect a local AI runtime
+                  below for richer, more personalised responses. All processing stays on your device.
+                </p>
+              </div>
+
+              {/* Provider selector */}
+              <div className="glass-card p-4 rounded-2xl space-y-3">
+                <p className="text-xs font-medium text-immortail-gold uppercase tracking-wider">Provider</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {AI_PROVIDERS.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => { updateSettings({ aiProvider: p.id }); setAiProbeStatus('idle'); setDetectedModels([]); }}
+                      className={`rounded-xl p-3 text-left border transition-all ${
+                        settings.aiProvider === p.id
+                          ? 'border-immortail-gold/60 bg-immortail-gold/10'
+                          : 'border-white/8 hover:border-white/20'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-lg">{p.emoji}</span>
+                        <span className={`text-xs font-semibold ${settings.aiProvider === p.id ? 'text-immortail-gold' : 'text-immortail-cream'}`}>{p.label}</span>
+                      </div>
+                      <p className="text-[10px] text-immortail-soft/60 leading-tight">{p.desc}</p>
+                      {p.port && <p className="text-[9px] text-immortail-soft/40 mt-1 font-mono">{p.port}</p>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* URL config (only for non-offline providers) */}
+              {settings.aiProvider !== 'offline' && (
+                <div className="glass-card p-4 rounded-2xl space-y-3">
+                  <p className="text-xs font-medium text-immortail-gold uppercase tracking-wider">Connection</p>
+
+                  {/* URL input */}
+                  <div className="space-y-1">
+                    <label className="text-xs text-immortail-soft">Server URL</label>
+                    <input
+                      type="text"
+                      value={
+                        settings.aiProvider === 'ollama'    ? settings.ollamaUrl    :
+                        settings.aiProvider === 'lmstudio'  ? settings.lmstudioUrl  :
+                        settings.aiProvider === 'gpt4all'   ? settings.gpt4allUrl   :
+                        settings.aiProvider === 'jan'       ? settings.janUrl        :
+                        settings.aiProvider === 'openwebui' ? settings.openwebuiUrl :
+                        settings.customAiUrl
+                      }
+                      onChange={e => {
+                        const field =
+                          settings.aiProvider === 'ollama'    ? 'ollamaUrl'    :
+                          settings.aiProvider === 'lmstudio'  ? 'lmstudioUrl'  :
+                          settings.aiProvider === 'gpt4all'   ? 'gpt4allUrl'   :
+                          settings.aiProvider === 'jan'       ? 'janUrl'        :
+                          settings.aiProvider === 'openwebui' ? 'openwebuiUrl' :
+                          'customAiUrl';
+                        updateSettings({ [field]: e.target.value });
+                        setAiProbeStatus('idle');
+                        setDetectedModels([]);
+                      }}
+                      placeholder="http://localhost:11434"
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-immortail-cream focus:outline-none focus:border-immortail-gold/40"
+                      spellCheck={false}
+                    />
+                  </div>
+
+                  {/* Custom API key (custom provider only) */}
+                  {settings.aiProvider === 'custom' && (
+                    <div className="space-y-1">
+                      <label className="text-xs text-immortail-soft">API Key <span className="opacity-40">(optional)</span></label>
+                      <input
+                        type="password"
+                        value={settings.customAiKey || ''}
+                        onChange={e => updateSettings({ customAiKey: e.target.value })}
+                        placeholder="Bearer token or API key"
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-immortail-cream focus:outline-none focus:border-immortail-gold/40"
+                        autoComplete="off"
+                      />
+                    </div>
+                  )}
+
+                  {/* Model selection */}
+                  <div className="space-y-1">
+                    <label className="text-xs text-immortail-soft">
+                      Model
+                      <span className="ml-1 opacity-40">(leave blank to use provider default)</span>
+                    </label>
+                    {detectedModels.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {detectedModels.map(m => (
+                          <button
+                            key={m}
+                            onClick={() => updateSettings({ aiModel: settings.aiModel === m ? '' : m })}
+                            className={`px-2 py-1 rounded-lg text-[10px] font-mono border transition-all ${
+                              settings.aiModel === m
+                                ? 'border-immortail-gold/60 bg-immortail-gold/15 text-immortail-gold'
+                                : 'border-white/10 text-immortail-soft hover:border-white/25'
+                            }`}
+                          >
+                            {m}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <input
+                        type="text"
+                        value={settings.aiModel || ''}
+                        onChange={e => updateSettings({ aiModel: e.target.value })}
+                        placeholder={
+                          settings.aiProvider === 'ollama'   ? 'e.g. llama3, mistral, gemma:2b' :
+                          settings.aiProvider === 'lmstudio' ? 'e.g. mistral-7b-instruct-v0.2'  :
+                          settings.aiProvider === 'gpt4all'  ? 'e.g. mistral-7b-instruct'        :
+                          settings.aiProvider === 'jan'      ? 'e.g. mistral-ins-7b-q4'          :
+                          'model name'
+                        }
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-immortail-cream focus:outline-none focus:border-immortail-gold/40"
+                      />
+                    )}
+                  </div>
+
+                  {/* Test button */}
+                  <button
+                    onClick={handleTestProvider}
+                    disabled={aiProbeStatus === 'checking'}
+                    className={`w-full py-2.5 rounded-xl text-xs font-medium border transition-all ${
+                      aiProbeStatus === 'ok'
+                        ? 'border-green-500/40 bg-green-500/10 text-green-300'
+                        : aiProbeStatus === 'fail'
+                        ? 'border-red-500/40 bg-red-500/10 text-red-300'
+                        : 'border-immortail-gold/30 bg-immortail-gold/8 text-immortail-gold hover:bg-immortail-gold/15'
+                    }`}
+                  >
+                    {aiProbeStatus === 'checking' ? '⏳ Checking connection…' :
+                     aiProbeStatus === 'ok'       ? `✓ Connected` :
+                     aiProbeStatus === 'fail'      ? '✗ Could not connect — tap to retry' :
+                     '🔌 Test connection'}
+                  </button>
+
+                  {/* Status message */}
+                  {aiProbeMsg ? (
+                    <p className={`text-[10px] text-center ${aiProbeStatus === 'ok' ? 'text-green-400' : 'text-red-400'}`}>
+                      {aiProbeMsg}
+                    </p>
+                  ) : null}
+                </div>
+              )}
+
+              {/* Provider info cards */}
+              <div className="glass-card p-4 rounded-2xl space-y-3">
+                <p className="text-xs font-medium text-immortail-gold uppercase tracking-wider">About open-source AI</p>
+                {AI_PROVIDERS.filter(p => p.id !== 'offline').map(p => (
+                  <div key={p.id} className="flex gap-3 items-start">
+                    <span className="text-lg mt-0.5 flex-shrink-0">{p.emoji}</span>
+                    <div>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-xs font-medium text-immortail-cream">{p.label}</span>
+                        {p.url && (
+                          <a href={p.url} target="_blank" rel="noopener noreferrer"
+                            className="text-[9px] text-immortail-gold/50 hover:text-immortail-gold">
+                            ↗ install
+                          </a>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-immortail-soft/60 leading-relaxed">{p.about}</p>
+                      {p.models && <p className="text-[9px] text-immortail-soft/40 mt-0.5">Popular models: {p.models}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Current active provider indicator */}
+              <div className="glass-card p-3 rounded-xl flex items-center justify-between">
+                <span className="text-xs text-immortail-soft">Active provider</span>
+                <span className="text-xs font-medium text-immortail-gold">
+                  {AI_PROVIDERS.find(p => p.id === settings.aiProvider)?.label || 'Offline'}
+                </span>
+              </div>
+
             </motion.div>
           )}
 

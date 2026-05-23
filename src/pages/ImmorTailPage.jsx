@@ -231,10 +231,10 @@ export default function ImmorTailPage() {
         },
       });
 
-      if (setupResult.ollamaAvailable) {
-        updateProgress(id, 50, '✓ Ollama connected — deep AI active');
+      if (setupResult.providerAvailable) {
+        updateProgress(id, 50, '✓ AI provider connected — deep AI active');
       } else {
-        updateProgress(id, 50, '✓ Offline AI active — no Ollama needed');
+        updateProgress(id, 50, '✓ Offline AI active — no local AI needed');
       }
 
       // ── Phase 2: Dog reconstruction (50–98%) ────────────────────────────────

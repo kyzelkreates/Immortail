@@ -439,6 +439,26 @@ const DEFAULT_SETTINGS = {
   notificationsEnabled: false,
   autoSave: true,
   language: 'en',
+
+  // ── AI provider settings ────────────────────────────────────────────────
+  // aiProvider controls which local AI runtime the orchestrator uses.
+  // 'offline'    — built-in rule engine (always works, no install needed)
+  // 'ollama'     — Ollama (llama3, mistral, gemma, phi, etc.)
+  // 'lmstudio'   — LM Studio (OpenAI-compatible, localhost:1234)
+  // 'gpt4all'    — GPT4All (OpenAI-compatible, localhost:4891)
+  // 'jan'        — Jan (OpenAI-compatible, localhost:1337)
+  // 'openwebui'  — Open WebUI (Ollama-compatible, configurable port)
+  // 'custom'     — user-defined URL + optional API key
+  aiProvider:       'offline',
+  ollamaUrl:        'http://localhost:11434',
+  lmstudioUrl:      'http://localhost:1234/v1',
+  gpt4allUrl:       'http://localhost:4891/v1',
+  janUrl:           'http://localhost:1337/v1',
+  openwebuiUrl:     'http://localhost:3000',
+  customAiUrl:      '',
+  customAiKey:      '',        // optional bearer token for custom endpoint
+  aiModel:          '',        // overrides default model for chosen provider
+  // ───────────────────────────────────────────────────────────────────────
 };
 
 export const AppSettings = {

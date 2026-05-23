@@ -135,7 +135,7 @@ async function _runAgent({ agent, prompt, context, emit }) {
   emit('checking', 10);
 
   // 1. Check if Ollama is available (cached ping)
-  const { available } = await isOllamaAvailable();
+  const { available, provider } = await isOllamaAvailable();
 
   emit('initialising', 30);
 
@@ -255,7 +255,7 @@ export function getFallbackResponse(agent) {
  * Runs 4 stages with progress callbacks. Used by the "Run AI Setup" button.
  * Hard timeout: 10s total. Always resolves.
  *
- * Returns: { ok, ollamaAvailable, stages, durationMs }
+ * Returns: { ok, providerAvailable, stages, durationMs }
  */
 export async function runAISetup({ onProgress, profileId } = {}) {
   const t0   = Date.now();
@@ -271,7 +271,7 @@ export async function runAISetup({ onProgress, profileId } = {}) {
       _doSetup({ emit, stages }),
       _timeoutReject(10000),
     ]);
-    ollamaAvailable = stages.find(s => s.id === 'ollama')?.ok ?? false;
+    ollamaAvailable = stages.find(s => s.id === 'provider')?.ok ?? false;
   } catch (e) {
     stages.push({ id: 'timeout', ok: false, detail: e.message });
     emit('timed out', 100, 'Setup took too long — using offline mode');
@@ -292,14 +292,14 @@ async function _doSetup({ emit, stages }) {
   stages.push({ id: 'system', ok: true, detail: 'Browser capabilities OK' });
 
   // Stage 2
-  emit('Initialising Ollama connection', 40, 'Checking local AI server…');
-  const { available, latencyMs } = await isOllamaAvailable();
+  emit('Connecting to AI provider', 40, 'Checking configured AI runtime…');
+  const { available, latencyMs, provider } = await isOllamaAvailable();
   stages.push({
-    id:     'ollama',
+    id:     'provider',
     ok:     available,
     detail: available
-      ? `Ollama responding (${latencyMs}ms)`
-      : 'Ollama not detected — offline mode active',
+      ? `${provider} responding (${latencyMs}ms)`
+      : 'Local AI not detected — offline mode active',
   });
 
   // Stage 3
@@ -312,7 +312,7 @@ async function _doSetup({ emit, stages }) {
   await sleep(200);
   stages.push({ id: 'finalise', ok: true, detail: 'Setup complete' });
 
-  emit('Ready', 100, available ? 'Ollama connected' : 'Running in offline mode');
+  emit('Ready', 100, available ? `${provider} connected` : 'Running in offline mode');
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
