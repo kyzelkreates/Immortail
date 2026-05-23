@@ -4,7 +4,7 @@
  * This page should feel like checking in on a beloved friend.
  */
 import { useEffect, useState, useCallback } from 'react';
-import { useNavigate }    from 'react-router-dom';
+import { useNavigate, useLocation }    from 'react-router-dom';
 import { motion }         from 'framer-motion';
 import { useApp }         from '../core/AppContext.jsx';
 import { Photos, Sounds, MemoryEntries, Timeline } from '../core/storage.js';
@@ -242,7 +242,7 @@ export default function DashboardPage() {
                   {setupSteps.map(s => (
                     <button
                       key={s.label}
-                      onClick={() => !s.done && navigate(s.to)}
+                      onClick={() => !s.done && navigate(s.to, { state: { from: 'setup' } })}
                       className={`flex items-center gap-2 p-2.5 rounded-xl text-left transition-all ${
                         s.done
                           ? 'bg-immortail-gold/8 border border-immortail-gold/20'
