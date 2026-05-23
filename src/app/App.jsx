@@ -29,7 +29,8 @@ import MemoryWalkPage from '../pages/MemoryWalkPage.jsx';
 
 // Components
 import LoadingScreen  from '../components/ui/LoadingScreen.jsx';
-import AITaskOverlay  from '../components/system/AITaskOverlay.jsx';
+import AITaskOverlay        from '../components/system/AITaskOverlay.jsx';
+import GlobalErrorBoundary from '../components/system/GlobalErrorBoundary.jsx';
 import InstallBanner  from '../components/ui/InstallBanner.jsx';
 import RestoreWizard  from '../components/restore/RestoreWizard.jsx';
 
@@ -125,6 +126,7 @@ export default function App({ onReady }) {
   if (!ready) return <LoadingScreen />;
 
   return (
+    <GlobalErrorBoundary>
     <BrowserRouter>
       <InstallBanner />
 
@@ -178,5 +180,6 @@ export default function App({ onReady }) {
       {/* Global AI task overlay — renders above all routes */}
       <AITaskOverlay />
     </BrowserRouter>
+    </GlobalErrorBoundary>
   );
 }

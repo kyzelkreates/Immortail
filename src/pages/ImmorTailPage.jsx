@@ -47,7 +47,6 @@ export default function ImmorTailPage() {
   const prevConfigRef         = useRef(null);
   const dogNotifyRef          = useRef(null);   // { notifySoundPlayed, notifyMemoryMoment }
   const interactionTimerRef   = useRef(null);   // FIX: clearable setTimeout for activeInteraction
-  useEffect(() => { prevConfigRef.current = activeConfig; }, [activeConfig]);
   const [activeInteraction, setActiveInteraction] = useState(null);
 
   // ── Performance governor ────────────────────────────────────────────────────
@@ -222,6 +221,8 @@ export default function ImmorTailPage() {
   }, [rebuild, saveDogConfig, profile]);
 
   const activeConfig = config || dogConfig;
+  // Track previous config to detect intro moment (must be AFTER activeConfig declaration)
+  useEffect(() => { prevConfigRef.current = activeConfig; }, [activeConfig]);
   const dogName      = profile?.name || 'Your dog';
   const ENV_ICONS = {
     [ENV_MODES.DAY]:      '☀️',
