@@ -3,7 +3,7 @@
  * Communicates with the Web Worker via message passing.
  * Never blocks the UI thread.
  */
-import { AICache, Photos, Sounds, MemoryEntries } from '../core/storage.js';
+import { AICache, AIRegistry, Photos, Sounds, MemoryEntries } from '../core/storage.js';
 import { AI_ANALYSIS } from '../core/constants.js';
 
 let _worker  = null;
@@ -13,6 +13,110 @@ let _status  = 'idle'; // 'idle' | 'loading' | 'ready' | 'error'
 let _statusListeners = new Set();
 
 // ─── Worker lifecycle ─────────────────────────────────────────────────────────
+
+// AI module registry — serialisable definitions only (no live state).
+const AI_MODULES = [
+  { id: 'dogBehaviourAI', version: '1.0', configKey: 'dog_config'  },
+  { id: 'memoryAI',       version: '1.0', configKey: 'ai_cache'    },
+  { id: 'emotionAI',      version: '1.0', configKey: 'adaptation'  },
+];
+const REGISTRY_VERSION = '1.0';
+const BOOT_TIMEOUT_MS  = 35000; // 35s hard cap — covers slow mobile CDN
+
+// Boot-once guard — prevents double initialisation across renders
+let _bootPromise = null;
+
+/**
+ * bootAI() — deterministic AI bootstrap pipeline.
+ *
+ * Steps:
+ *  1. BOOTING_AI — set status immediately
+ *  2. Read persisted registry from IDB (rehydration on reload)
+ *  3. Init worker if not already running
+ *  4. Wait for worker ready (with hard timeout)
+ *  5. Persist registry snapshot to IDB
+ *  6. Set status READY
+ *
+ * Always resolves — never hangs. Returns { ok, registry, error }.
+ * Boot-once: if called again while already running, returns same promise.
+ */
+export function bootAI() {
+  // Return in-flight promise if boot already running (prevents double-boot on StrictMode double-mount)
+  if (_bootPromise) return _bootPromise;
+
+  _bootPromise = _runBoot().finally(() => {
+    // Clear so a manual retry after error can re-run
+    if (_status === 'error') _bootPromise = null;
+  });
+  return _bootPromise;
+}
+
+async function _runBoot() {
+  console.log('[AI Boot] Step 1: BOOTING_AI');
+  setStatus('loading');
+
+  // Step 2: Read persisted registry (non-fatal if missing)
+  let persistedRegistry = null;
+  try {
+    persistedRegistry = await AIRegistry.get();
+    if (persistedRegistry) {
+      console.log('[AI Boot] Step 2: Registry rehydrated from IDB', persistedRegistry.version);
+    } else {
+      console.log('[AI Boot] Step 2: No persisted registry — fresh boot');
+    }
+  } catch (e) {
+    console.warn('[AI Boot] Step 2: Registry read failed (non-fatal):', e.message);
+  }
+
+  // Step 3: Init worker
+  console.log('[AI Boot] Step 3: Initialising worker');
+  try {
+    initAI(); // idempotent — does nothing if worker already running
+  } catch (e) {
+    console.error('[AI Boot] Step 3: Worker init failed:', e.message);
+    setStatus('error');
+    return { ok: false, error: e.message };
+  }
+
+  // Step 4: Wait for ready with hard timeout
+  console.log('[AI Boot] Step 4: Waiting for worker ready');
+  try {
+    await Promise.race([
+      waitForReady(BOOT_TIMEOUT_MS),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('AI boot timeout after 35s')), BOOT_TIMEOUT_MS)
+      ),
+    ]);
+    console.log('[AI Boot] Step 4: Worker ready ✓');
+  } catch (e) {
+    console.error('[AI Boot] Step 4: Worker ready failed:', e.message);
+    // Degrade gracefully — config build still works without model
+    setStatus('error');
+    return { ok: false, error: e.message };
+  }
+
+  // Step 5: Persist registry snapshot to IDB
+  console.log('[AI Boot] Step 5: Persisting registry to IDB');
+  const snapshot = {
+    version:    REGISTRY_VERSION,
+    modules:    AI_MODULES.map(m => m.id),
+    configKeys: AI_MODULES.map(m => m.configKey),
+    bootsAt:    Date.now(),
+  };
+  try {
+    await AIRegistry.save(snapshot);
+    console.log('[AI Boot] Step 5: Registry saved ✓');
+  } catch (e) {
+    // Non-fatal — boot still succeeds; registry just won't be rehydrated next load
+    console.warn('[AI Boot] Step 5: Registry save failed (non-fatal):', e.message);
+  }
+
+  // Step 6: READY
+  console.log('[AI Boot] Step 6: READY ✓');
+  setStatus('ready');
+  return { ok: true, registry: snapshot };
+}
+
 export function getWorkerStatus() { return _status; }
 
 export function onStatusChange(cb) {
@@ -220,7 +324,7 @@ function aggregateSoundResults(results) {
 }
 
 // ─── Wait for model ready ─────────────────────────────────────────────────────
-function waitForReady(timeout = 30000) {
+export function waitForReady(timeout = 30000) {
   if (_status === 'ready') return Promise.resolve();
   if (_status === 'error') return Promise.reject(new Error('AI model unavailable'));
   return new Promise((resolve, reject) => {

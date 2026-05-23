@@ -19,6 +19,7 @@ import {
   initStorage, ActiveProfile, Profiles, AppSettings,
   DogConfig,
 } from './storage.js';
+import { bootAI, getWorkerStatus } from '../ai/aiEngine.js';
 
 const AppContext = createContext(null);
 
@@ -46,6 +47,8 @@ export function AppProvider({ children }) {
 
       if (!savedId) {
         // No saved profile — fresh install or after deactivation
+        // Still boot AI so the worker is ready when the user creates their profile
+        bootAI().catch(e => console.warn('[AppContext] AI pre-boot failed (non-fatal):', e.message));
         setReady(true);
         return;
       }
@@ -72,7 +75,12 @@ export function AppProvider({ children }) {
           console.error('[AppContext] Profile hydration failed:', err);
           ActiveProfile.clear();
         })
-        .finally(() => setReady(true));
+        .finally(() => {
+          // Boot AI kernel after storage hydration — non-blocking, always resolves
+          // bootAI() is idempotent and has its own 35s hard timeout
+          bootAI().catch(e => console.warn('[AppContext] AI boot failed (non-fatal):', e.message));
+          setReady(true);
+        });
     });
 
     // PWA install prompt

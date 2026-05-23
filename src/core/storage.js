@@ -9,7 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 // ─── DB Config ────────────────────────────────────────────────────────────────
 const DB_NAME    = 'immortail-db';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 const STORES = {
   PHOTOS:      'photos',
@@ -24,6 +24,7 @@ const STORES = {
   SETTINGS:    'settings',
   VIDEOS:      'videos',          // v2
   ADAPTATION:  'adaptation',     // v2 — companion learning
+  AI_REGISTRY: 'ai_registry',   // v3 — AI module boot registry
 };
 
 // ─── LS Keys ──────────────────────────────────────────────────────────────────
@@ -103,6 +104,10 @@ async function getDB() {
       // Companion adaptation (ritual history, spot preferences)
       if (!db.objectStoreNames.contains(STORES.ADAPTATION)) {
         db.createObjectStore(STORES.ADAPTATION, { keyPath: 'profileId' });
+      }
+      // ── v3 stores ─────────────────────────────────────────────────────────
+      if (!db.objectStoreNames.contains(STORES.AI_REGISTRY)) {
+        db.createObjectStore(STORES.AI_REGISTRY, { keyPath: 'key' });
       }
     }
   });
@@ -546,6 +551,37 @@ export const ProfileIO = {
     return profile;
   }
 };
+// ─── AI Registry (boot kernel persistence) ───────────────────────────────────
+// Stores a lightweight record of AI module initialisation state.
+// Key is always 'singleton' — one record for the whole app.
+// Only serialisable state stored here — no live objects or running processes.
+export const AIRegistry = {
+  REGISTRY_KEY: 'singleton',
+
+  /** Save AI registry snapshot to IDB after successful boot. */
+  async save(snapshot) {
+    await dbPut(STORES.AI_REGISTRY, {
+      key:        AIRegistry.REGISTRY_KEY,
+      version:    snapshot.version    || '1.0',
+      modules:    snapshot.modules    || [],
+      configKeys: snapshot.configKeys || [],
+      bootsAt:    snapshot.bootsAt    || Date.now(),
+      savedAt:    Date.now(),
+    });
+  },
+
+  /** Read last persisted registry from IDB. Returns null on fresh install. */
+  async get() {
+    const record = await dbGet(STORES.AI_REGISTRY, AIRegistry.REGISTRY_KEY);
+    return record || null;
+  },
+
+  /** Clear registry (e.g. on app reset or failed boot). */
+  async clear() {
+    return dbDelete(STORES.AI_REGISTRY, AIRegistry.REGISTRY_KEY);
+  },
+};
+
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 export async function initStorage() {

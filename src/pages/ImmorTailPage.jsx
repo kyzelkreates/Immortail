@@ -26,6 +26,7 @@ import {
   createTask, updateProgress, completeTask, failTask,
   isTaskActive,
 } from '../system/aiTaskManager.js';
+import { bootAI } from '../ai/aiEngine.js';
 import { useCompanionRituals }        from '../hooks/useCompanionRituals.js';
 import { useQuietCompanion }          from '../hooks/useQuietCompanion.js';
 
@@ -204,7 +205,7 @@ export default function ImmorTailPage() {
     }
   }, [startRitual, setEnvMode, logEnv, speak, profile]);
 
-  // Rebuild dog AI — fixed: try/catch/finally, task manager integration
+  // Rebuild dog AI — AI kernel boots first, then reconstruction runs
   const handleRebuild = useCallback(async () => {
     if (reconstructing) return; // guard against double-click (button disabled handles this too)
 
@@ -214,6 +215,10 @@ export default function ImmorTailPage() {
     if (duplicate) return;
 
     try {
+      // Step 1: Ensure AI kernel is booted and registry is persisted
+      updateProgress(id, 3, 'Booting AI kernel…');
+      await bootAI(); // idempotent — resolves immediately if already ready
+
       updateProgress(id, 5, 'Initialising AI core…');
       const result = await rebuild((p) => {
         // Map internal progress to task manager
