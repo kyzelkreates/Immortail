@@ -29,6 +29,7 @@ import MemoryWalkPage from '../pages/MemoryWalkPage.jsx';
 
 // Components
 import LoadingScreen  from '../components/ui/LoadingScreen.jsx';
+import AITaskOverlay  from '../components/system/AITaskOverlay.jsx';
 import InstallBanner  from '../components/ui/InstallBanner.jsx';
 import RestoreWizard  from '../components/restore/RestoreWizard.jsx';
 
@@ -174,6 +175,8 @@ export default function App({ onReady }) {
         {/* Catch-all */}
         <Route path="*" element={<Navigate to={ROUTES.HOME} replace />} />
       </Routes>
+      {/* Global AI task overlay — renders above all routes */}
+      <AITaskOverlay />
     </BrowserRouter>
   );
 }

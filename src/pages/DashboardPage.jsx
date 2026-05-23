@@ -58,7 +58,9 @@ export default function DashboardPage() {
       Timeline.listByProfile(activeProfileId),
     ]).then(([p, s, m, t]) =>
       setStats({ photos: p.length, sounds: s.length, memories: m.length, timeline: t.length })
-    );
+    ).catch(e => {
+      console.warn('[Dashboard] Stats load failed (non-fatal):', e.message);
+    });
   }, [activeProfileId]);
 
   useEffect(() => {

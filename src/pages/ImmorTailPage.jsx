@@ -22,6 +22,10 @@ import { usePerformanceGovernor } from '../hooks/usePerformanceGovernor.js';
 import { useAmbientVoice }        from '../hooks/useAmbientVoice.js';
 import { getAutoEnvMode, ROUTES }   from '../core/constants.js';
 import { useNavigate }                from 'react-router-dom';
+import {
+  createTask, updateProgress, completeTask, failTask,
+  isTaskActive,
+} from '../system/aiTaskManager.js';
 import { useCompanionRituals }        from '../hooks/useCompanionRituals.js';
 import { useQuietCompanion }          from '../hooks/useQuietCompanion.js';
 
@@ -39,9 +43,10 @@ export default function ImmorTailPage() {
   const [showPanel, setShowPanel]     = useState('interactions'); // 'interactions' | 'voice' | 'ai'
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [interactionLog, setInteractionLog] = useState([]);
-  const soundsRef      = useRef(null);
-  const prevConfigRef  = useRef(null);
-  const dogNotifyRef   = useRef(null);   // { notifySoundPlayed, notifyMemoryMoment }
+  const soundsRef             = useRef(null);
+  const prevConfigRef         = useRef(null);
+  const dogNotifyRef          = useRef(null);   // { notifySoundPlayed, notifyMemoryMoment }
+  const interactionTimerRef   = useRef(null);   // FIX: clearable setTimeout for activeInteraction
   useEffect(() => { prevConfigRef.current = activeConfig; }, [activeConfig]);
   const [activeInteraction, setActiveInteraction] = useState(null);
 
@@ -99,6 +104,13 @@ export default function ImmorTailPage() {
     });
   };
 
+  // FIX: Cleanup interaction timer on unmount
+  useEffect(() => {
+    return () => {
+      if (interactionTimerRef.current) clearTimeout(interactionTimerRef.current);
+    };
+  }, []);
+
   // Load sounds once (lazy)
   const loadSounds = useCallback(async () => {
     if (soundsRef.current) return soundsRef.current;
@@ -111,7 +123,11 @@ export default function ImmorTailPage() {
   const handleInteraction = useCallback(async (type) => {
     setActiveInteraction(type);
     // Clear active interaction after brief window
-    setTimeout(() => setActiveInteraction(null), 5000);
+    if (interactionTimerRef.current) clearTimeout(interactionTimerRef.current);
+    interactionTimerRef.current = setTimeout(() => {
+      setActiveInteraction(null);
+      interactionTimerRef.current = null;
+    }, 5000);
     const entry = { type, ts: Date.now() };
     setInteractionLog(prev => [entry, ...prev.slice(0, 9)]);
 
@@ -146,23 +162,64 @@ export default function ImmorTailPage() {
     setInteractionLog(prev => [{ type: 'voice:' + reaction, ts: Date.now() }, ...prev.slice(0, 9)]);
   }, []);
 
-  // Ritual activation
+  // Ritual activation — fixed: try/catch wrapper
   const handleStartRitual = useCallback(async (ritualId) => {
-    const ritual = await startRitual(ritualId);
-    if (!ritual) return;
-    if (ritual.env)      { setEnvMode(ritual.env); logEnv(ritual.env); }
-    if (ritual.dogState) setActiveInteraction(ritual.dogState);
-    // Bedtime ambient voice
-    if (ritualId === 'bedtime') speak('bedtime', { name: profile?.name });
-    // Morning greeting voice
-    if (ritualId === 'morning') speak('welcome-back', { name: profile?.name });
+    try {
+      const ritual = await startRitual(ritualId);
+      if (!ritual) return;
+      if (ritual.env)      { setEnvMode(ritual.env); logEnv(ritual.env); }
+      if (ritual.dogState) {
+        if (interactionTimerRef.current) clearTimeout(interactionTimerRef.current);
+        setActiveInteraction(ritual.dogState);
+        interactionTimerRef.current = setTimeout(() => {
+          setActiveInteraction(null);
+          interactionTimerRef.current = null;
+        }, 8000); // rituals get longer display time
+      }
+      // Ambient voice
+      if (ritualId === 'bedtime') speak('bedtime', { name: profile?.name });
+      if (ritualId === 'morning') speak('welcome-back', { name: profile?.name });
+    } catch (e) {
+      console.warn('[ImmorTailPage] Ritual start failed (non-fatal):', e.message);
+    }
   }, [startRitual, setEnvMode, logEnv, speak, profile]);
 
-  // Rebuild dog AI
+  // Rebuild dog AI — fixed: try/catch/finally, duplicate guard, task manager
   const handleRebuild = useCallback(async () => {
-    const result = await rebuild();
-    if (result) await saveDogConfig(result);
-  }, [rebuild, saveDogConfig]);
+    if (isTaskActive()) return; // duplicate execution guard
+
+    const dogName = profile?.name || 'companion';
+    const { id, duplicate } = createTask('RECONSTRUCT', `Reconstructing ${dogName}`);
+    if (duplicate) return;
+
+    try {
+      updateProgress(id, 5, 'Initialising AI core…');
+      const result = await rebuild((p) => {
+        // Map internal progress to task manager
+        const pctMap = {
+          'photos':            10,
+          'analysing images':  30,
+          'analysing sounds':  55,
+          'building personality': 78,
+          'done':              98,
+        };
+        const pct = pctMap[p?.step] ?? p?.pct ?? 50;
+        updateProgress(id, pct, undefined);
+      });
+
+      if (result) {
+        updateProgress(id, 98, 'Saving reconstruction…');
+        await saveDogConfig(result);
+        completeTask(id);
+      } else {
+        failTask(id, 'Reconstruction returned no result. Please try again.');
+      }
+    } catch (e) {
+      console.error('[ImmorTailPage] Rebuild failed:', e);
+      failTask(id, e.message || 'Reconstruction failed. Your memories are safe.');
+    }
+    // no finally needed — completeTask/failTask always called above
+  }, [rebuild, saveDogConfig, profile]);
 
   const activeConfig = config || dogConfig;
   const dogName      = profile?.name || 'Your dog';
@@ -252,7 +309,7 @@ export default function ImmorTailPage() {
           </div>
           <button
             onClick={handleRebuild}
-            disabled={aiStatus === 'loading'}
+            disabled={aiStatus === 'loading' || reconstructing}
             className="btn-primary text-xs px-3 py-2 shrink-0"
           >
             Build

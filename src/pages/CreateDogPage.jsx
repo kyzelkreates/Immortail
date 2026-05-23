@@ -132,6 +132,7 @@ export default function CreateDogPage() {
   const navigatedRef = useRef(false);
 
   const handleCreate = async () => {
+    if (saving) return; // duplicate tap guard
     setSaving(true);
     setError('');
     navigatedRef.current = false;
@@ -167,6 +168,9 @@ export default function CreateDogPage() {
           ? 'Could not save to device storage. Please try again.'
           : 'Something went wrong creating the profile. Please try again.'
       );
+    } finally {
+      // Always reset saving — even if navigation didn't happen (e.g. error path)
+      // If navigation succeeded and component unmounted, React will ignore this setState
       setSaving(false);
     }
   };

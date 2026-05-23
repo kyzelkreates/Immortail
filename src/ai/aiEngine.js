@@ -70,13 +70,14 @@ function send(type, payload) {
   return new Promise((resolve, reject) => {
     _pending.set(id, { resolve, reject });
     _worker.postMessage({ type, id, payload });
-    // Timeout after 30s
+    // Per-call timeout — 90s for image batches, enough for slow mobile
+    const timeoutMs = payload?.images?.length > 5 ? 90000 : 30000;
     setTimeout(() => {
       if (_pending.has(id)) {
         _pending.delete(id);
-        reject(new Error('AI worker timeout'));
+        reject(new Error('AI worker timeout — device may be slow. Please try again.'));
       }
-    }, 30000);
+    }, timeoutMs);
   });
 }
 
@@ -139,7 +140,12 @@ export async function analysePhotoBatch(photos) {
 export async function reconstructDog(profileId, profile, onProgress) {
   if (!profileId) throw new Error('No profile ID');
 
-  onProgress?.({ step: 'photos', pct: 5 });
+  // Safe progress emitter — never lets a callback error crash the pipeline
+  const emit = (step, pct) => {
+    try { onProgress?.({ step, pct }); } catch {}
+  };
+
+  emit('photos', 5);
 
   // 1. Load data
   const [photos, sounds, memories] = await Promise.all([
@@ -149,7 +155,7 @@ export async function reconstructDog(profileId, profile, onProgress) {
   ]);
 
   // 2. Analyse images
-  onProgress?.({ step: 'analysing images', pct: 20 });
+  emit('analysing images', 20);
   let imageAnalysis = await AICache.get(profileId, AI_ANALYSIS.PHOTO);
   if (!imageAnalysis && photos.length > 0) {
     try {
@@ -162,7 +168,7 @@ export async function reconstructDog(profileId, profile, onProgress) {
   }
 
   // 3. Aggregate sound analysis
-  onProgress?.({ step: 'analysing sounds', pct: 50 });
+  emit('analysing sounds', 50);
   let soundAnalysis = await AICache.get(profileId, AI_ANALYSIS.SOUND);
   if (!soundAnalysis && sounds.length > 0) {
     const analysedSounds = sounds.filter(s => s.analysisResult);
@@ -173,7 +179,7 @@ export async function reconstructDog(profileId, profile, onProgress) {
   }
 
   // 4. Build config
-  onProgress?.({ step: 'building personality', pct: 75 });
+  emit('building personality', 75);
   const config = await send('BUILD_DOG_CONFIG', {
     profile,
     imageAnalysis,
@@ -181,7 +187,7 @@ export async function reconstructDog(profileId, profile, onProgress) {
     memories,
   });
 
-  onProgress?.({ step: 'done', pct: 100 });
+  emit('done', 100);
   return config;
 }
 
@@ -207,13 +213,14 @@ function aggregateSoundResults(results) {
 }
 
 // ─── Wait for model ready ─────────────────────────────────────────────────────
-function waitForReady(timeout = 20000) {
+function waitForReady(timeout = 30000) {
   if (_status === 'ready') return Promise.resolve();
+  if (_status === 'error') return Promise.reject(new Error('AI model unavailable'));
   return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error('AI model timeout')), timeout);
+    const t = setTimeout(() => reject(new Error('AI model taking too long — please try again.')), timeout);
     const unsub = onStatusChange(s => {
       if (s === 'ready')  { clearTimeout(t); unsub(); resolve(); }
-      if (s === 'error')  { clearTimeout(t); unsub(); reject(new Error('AI model failed')); }
+      if (s === 'error')  { clearTimeout(t); unsub(); reject(new Error('AI model failed to load')); }
     });
   });
 }
