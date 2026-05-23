@@ -39,6 +39,7 @@ const ENV_CYCLE = [
 export default function ImmorTailPage() {
   const { activeProfileId, profile, dogConfig, saveDogConfig, settings } = useApp();
   const { aiStatus, reconstructing, progress, error: aiError, config, rebuild } = useAIEngine(activeProfileId, profile);
+  const navigate = useNavigate(); // FIX BUG 1: was imported but never called → navigate() was undefined
 
   const [envMode, setEnvMode]         = useState(ENV_MODES.DAY);
   const [showPanel, setShowPanel]     = useState('interactions'); // 'interactions' | 'voice' | 'ai'
@@ -245,7 +246,7 @@ export default function ImmorTailPage() {
       failTask(id, e.message || 'Reconstruction failed. Your memories are safe.');
     }
     // no finally needed — completeTask/failTask always called above
-  }, [rebuild, saveDogConfig, profile]);
+  }, [rebuild, saveDogConfig, profile, reconstructing]); // FIX BUG 3: reconstructing read in callback must be in deps
 
   const activeConfig = config || dogConfig;
   // Track previous config to detect intro moment (must be AFTER activeConfig declaration)
@@ -378,6 +379,7 @@ export default function ImmorTailPage() {
             { id: 'rituals',      label: '🕯️ Rituals' },
             { id: 'moments',      label: '✨ Moments' },
             { id: 'quiet',        label: '😴 Quiet' },
+            { id: 'ai',           label: '🤖 AI' },
           ].map(tab => (
             <button
               key={tab.id}
@@ -416,6 +418,8 @@ export default function ImmorTailPage() {
             </motion.div>
           )}
 
+          {/* FIX BUG 4: 'voice' tab was removed from tab bar in a previous pass
+              but the render block remained. Kept as dead-safe guard — never shown. */}
           {showPanel === 'voice' && (
             <motion.div key="voice" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <VoiceRecallPanel profileId={activeProfileId} onTrigger={handleVoiceTrigger} />
