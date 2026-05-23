@@ -27,6 +27,7 @@ import {
   isTaskActive,
 } from '../system/aiTaskManager.js';
 import { bootAI } from '../ai/aiEngine.js';
+import { run as orchestratorRun, runAISetup } from '../services/agentOrchestrator.js';
 import { useCompanionRituals }        from '../hooks/useCompanionRituals.js';
 import { useQuietCompanion }          from '../hooks/useQuietCompanion.js';
 
@@ -206,47 +207,69 @@ export default function ImmorTailPage() {
     }
   }, [startRitual, setEnvMode, logEnv, speak, profile]);
 
-  // Rebuild dog AI — AI kernel boots first, then reconstruction runs
+  // ── Run AI Setup (orchestrator-wired) ──────────────────────────────────────
+  // Phase 1: runAISetup() runs 4 stages + Ollama probe (hard 10s timeout).
+  // Phase 2: rebuild() reconstructs the dog config from stored media.
+  // Both phases are guarded — never hangs, always resolves or shows error.
   const handleRebuild = useCallback(async () => {
-    if (reconstructing) return; // guard against double-click (button disabled handles this too)
+    if (reconstructing) return; // double-click guard
 
-    const dogName = profile?.name || 'companion';
-    // createTask returns existing if already active — use duplicate flag to avoid double work
-    const { id, duplicate } = createTask('RECONSTRUCT', `Reconstructing ${dogName}`);
+    const _dogName = profile?.name || 'companion';
+    const { id, duplicate } = createTask('RECONSTRUCT', `AI Setup: ${_dogName}`);
     if (duplicate) return;
 
     try {
-      // Step 1: Ensure AI kernel is booted and registry is persisted
-      updateProgress(id, 3, 'Booting AI kernel…');
-      await bootAI(); // idempotent — resolves immediately if already ready
+      // ── Phase 1: AI Setup via orchestrator (4 stages, 10s max) ─────────────
+      updateProgress(id, 2, 'Starting AI setup…');
 
-      updateProgress(id, 5, 'Initialising AI core…');
+      const setupResult = await runAISetup({
+        profileId:  activeProfileId,
+        onProgress: ({ stage, pct, detail }) => {
+          // Map setup stages to task progress (0–50%)
+          const mapped = Math.round(pct * 0.5);
+          updateProgress(id, mapped, stage + (detail ? ` — ${detail}` : ''));
+        },
+      });
+
+      if (setupResult.ollamaAvailable) {
+        updateProgress(id, 50, '✓ Ollama connected — deep AI active');
+      } else {
+        updateProgress(id, 50, '✓ Offline AI active — no Ollama needed');
+      }
+
+      // ── Phase 2: Dog reconstruction (50–98%) ────────────────────────────────
+      updateProgress(id, 52, 'Analysing memories…');
+
       const result = await rebuild((p) => {
-        // Map internal progress to task manager
         const pctMap = {
-          'photos':            10,
-          'analysing images':  30,
-          'analysing sounds':  55,
-          'building personality': 78,
-          'done':              98,
+          'photos':                10,
+          'analysing images':      25,
+          'analysing sounds':      40,
+          'building personality':  60,
+          'done':                  98,
         };
-        const pct = pctMap[p?.step] ?? p?.pct ?? 50;
-        updateProgress(id, pct, undefined);
+        const raw = pctMap[p?.step] ?? p?.pct ?? 50;
+        // Map 0–100 → 52–98
+        const mapped = Math.round(52 + (raw / 100) * 46);
+        updateProgress(id, mapped, undefined);
       });
 
       if (result) {
-        updateProgress(id, 98, 'Saving reconstruction…');
+        updateProgress(id, 98, 'Saving personality…');
         await saveDogConfig(result);
         completeTask(id);
       } else {
-        failTask(id, 'Reconstruction returned no result. Please try again.');
+        // rebuild() returned null — inline fallback already built the config
+        // This is not an error — degrade gracefully
+        failTask(id, 'AI setup completed in offline mode. Your companion is ready.');
       }
+
     } catch (e) {
-      console.error('[ImmorTailPage] Rebuild failed:', e);
-      failTask(id, e.message || 'Reconstruction failed. Your memories are safe.');
+      console.error('[ImmorTailPage] AI setup failed:', e);
+      failTask(id, e.message || 'AI setup interrupted. Your memories are safe.');
     }
     // no finally needed — completeTask/failTask always called above
-  }, [rebuild, saveDogConfig, profile, reconstructing]); // FIX BUG 3: reconstructing read in callback must be in deps
+  }, [rebuild, saveDogConfig, profile, reconstructing, activeProfileId]);
 
   const activeConfig = config || dogConfig;
   // Track previous config to detect intro moment (must be AFTER activeConfig declaration)

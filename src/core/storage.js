@@ -9,7 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 // ─── DB Config ────────────────────────────────────────────────────────────────
 const DB_NAME    = 'immortail-db';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 const STORES = {
   PHOTOS:      'photos',
@@ -25,6 +25,7 @@ const STORES = {
   VIDEOS:      'videos',          // v2
   ADAPTATION:  'adaptation',     // v2 — companion learning
   AI_REGISTRY: 'ai_registry',   // v3 — AI module boot registry
+  AI_JOBS:     'ai_jobs',       // v4 — agent orchestrator job queue
 };
 
 // ─── LS Keys ──────────────────────────────────────────────────────────────────
@@ -108,6 +109,14 @@ async function getDB() {
       // ── v3 stores ─────────────────────────────────────────────────────────
       if (!db.objectStoreNames.contains(STORES.AI_REGISTRY)) {
         db.createObjectStore(STORES.AI_REGISTRY, { keyPath: 'key' });
+      }
+      // ── v4 stores ─────────────────────────────────────────────────────────
+      if (!db.objectStoreNames.contains(STORES.AI_JOBS)) {
+        const j = db.createObjectStore(STORES.AI_JOBS, { keyPath: 'id' });
+        j.createIndex('profileId',  'profileId');
+        j.createIndex('agent',      'agent');
+        j.createIndex('status',     'status');
+        j.createIndex('createdAt',  'createdAt');
       }
     }
   });
@@ -551,6 +560,86 @@ export const ProfileIO = {
     return profile;
   }
 };
+// ─── AI Jobs (agent orchestrator job queue) ──────────────────────────────────
+// Stores: running | ok | fallback | error jobs from agentOrchestrator.js.
+// All AI agent state flows through here — single source of truth.
+export const AIJobs = {
+  /** Create a new job record (status: 'running'). */
+  async create(record) {
+    return dbPut(STORES.AI_JOBS, {
+      id:          record.id,
+      agent:       record.agent      || 'unknown',
+      prompt:      record.prompt     || '',
+      status:      record.status     || 'running',
+      result:      record.result     || null,
+      error:       record.error      || null,
+      profileId:   record.profileId  || null,
+      durationMs:  null,
+      createdAt:   record.createdAt  || Date.now(),
+      completedAt: null,
+    });
+  },
+
+  /** Update an existing job (merge partial fields). */
+  async update(id, fields) {
+    const existing = await dbGet(STORES.AI_JOBS, id);
+    if (!existing) return;
+    return dbPut(STORES.AI_JOBS, { ...existing, ...fields });
+  },
+
+  /** Get a single job by ID. */
+  async get(id) { return dbGet(STORES.AI_JOBS, id); },
+
+  /** List all jobs, newest first (up to limit). */
+  async list({ limit = 50 } = {}) {
+    const all = await dbGetAll(STORES.AI_JOBS);
+    return all
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit);
+  },
+
+  /** List jobs by profile. */
+  async listByProfile(profileId) {
+    return dbGetAllByIndex(STORES.AI_JOBS, 'profileId', profileId);
+  },
+
+  /** List jobs by status ('running' | 'ok' | 'fallback' | 'error'). */
+  async listByStatus(status) {
+    return dbGetAllByIndex(STORES.AI_JOBS, 'status', status);
+  },
+
+  /** Delete a single job. */
+  async delete(id) { return dbDelete(STORES.AI_JOBS, id); },
+
+  /** Purge completed jobs older than maxAgeMs (default: 7 days). */
+  async purgeOld(maxAgeMs = 7 * 24 * 60 * 60 * 1000) {
+    const all = await dbGetAll(STORES.AI_JOBS);
+    const cutoff = Date.now() - maxAgeMs;
+    const toDelete = all.filter(
+      j => j.status !== 'running' && j.createdAt < cutoff
+    );
+    await Promise.all(toDelete.map(j => dbDelete(STORES.AI_JOBS, j.id)));
+    return toDelete.length;
+  },
+
+  /** Mark any stale 'running' jobs as 'error' (e.g. after app restart). */
+  async recoverStale() {
+    const running = await dbGetAllByIndex(STORES.AI_JOBS, 'status', 'running');
+    const staleMs = 60000; // jobs running > 60s at startup are stale
+    const now = Date.now();
+    await Promise.all(
+      running
+        .filter(j => now - j.createdAt > staleMs)
+        .map(j => dbPut(STORES.AI_JOBS, {
+          ...j,
+          status:      'error',
+          error:       'Job interrupted (app restarted)',
+          completedAt: now,
+        }))
+    );
+  },
+};
+
 // ─── AI Registry (boot kernel persistence) ───────────────────────────────────
 // Stores a lightweight record of AI module initialisation state.
 // Key is always 'singleton' — one record for the whole app.

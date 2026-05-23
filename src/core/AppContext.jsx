@@ -17,7 +17,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import {
   initStorage, ActiveProfile, Profiles, AppSettings,
-  DogConfig,
+  DogConfig, AIJobs,
 } from './storage.js';
 import { bootAI, getWorkerStatus } from '../ai/aiEngine.js';
 
@@ -79,6 +79,8 @@ export function AppProvider({ children }) {
           // Boot AI kernel after storage hydration — non-blocking, always resolves
           // bootAI() is idempotent and has its own 35s hard timeout
           bootAI().catch(e => console.warn('[AppContext] AI boot failed (non-fatal):', e.message));
+          // Recover any stale AI jobs that were left 'running' by a previous session crash
+          AIJobs.recoverStale().catch(() => {});
           setReady(true);
         });
     });
