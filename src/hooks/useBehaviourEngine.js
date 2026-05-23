@@ -1,33 +1,49 @@
 /**
- * Immortail™ — useBehaviourEngine
+ * Immortail™ — useBehaviourEngine  v2.0
  * ─────────────────────────────────────────────────────────────────────────────
- * React interface to the behaviourWorker.js Web Worker.
- * Provides:
- *   - emotionalState       (string)  — current emotional state
- *   - dogState             (string)  — mapped renderer state
- *   - personality          (object)  — learned personality weights
- *   - notifyInteraction    (fn)      — call when user interacts
- *   - notifySoundPlayed    (fn)      — call when a sound plays
- *   - notifyMemoryMoment   (fn)      — call when a memory surfaces
+ * React bridge to the 10-agent behaviourWorker.js orchestrator.
+ *
+ * New in v2.0:
+ *   - notifyEnvChange(env)     — Agent 6: env → behaviour coupling
+ *   - notifyPointerMove(x,y)   — Agent 8: gaze tracks pointer (throttled)
+ *   - notifyPerformance(fps, isLowPower) — Agent 9: FPS feedback
+ *   - gazeTarget               — { x, y } for dogRenderer
+ *   - movementState            — procedural movement hint for renderer
+ *   - breathRhythm             — 0.4=slow .. 1.8=fast
+ *   - soundReactionActive      — for ear-lift animation
+ *   - soundReactionDir         — which way ears/head turn on sound
+ *
+ * PRESERVED (all existing callers unbroken):
+ *   - emotionalState, dogState, personality
+ *   - notifyInteraction, notifySoundPlayed, notifyMemoryMoment
+ *   - ready flag
  *
  * Additive only — does NOT touch storage, routing, or other hooks.
- * Persists personality weights to localStorage (privacy-safe, local-only).
+ * Personality weights persisted to localStorage (privacy-safe, local-only).
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-const PERSONALITY_LS_KEY = 'immortail:personality';
-const TICK_INTERVAL_MS   = 800;  // behaviour ticks — light, no RAF
+const PERSONALITY_LS_KEY  = 'immortail:personality';
+const TICK_INTERVAL_MS    = 800;   // 800ms ticks — lightweight
+const POINTER_THROTTLE_MS = 200;   // don't spam worker with pointer events
 
-export function useBehaviourEngine(dogConfig, activeProfileId) {
-  const workerRef       = useRef(null);
-  const msgIdRef        = useRef(0);
-  const pendingRef      = useRef({});
-  const tickIntervalRef = useRef(null);
+export function useBehaviourEngine(dogConfig, activeProfileId, currentEnv) {
+  const workerRef        = useRef(null);
+  const msgIdRef         = useRef(0);
+  const pendingRef       = useRef({});
+  const tickIntervalRef  = useRef(null);
+  const lastPointerSend  = useRef(0);
+  const lastEnvRef       = useRef(null);
 
-  const [emotionalState, setEmotionalState] = useState('relaxed');
-  const [dogState,       setDogState]       = useState('idle');
-  const [personality,    setPersonality]    = useState({});
-  const [ready,          setReady]          = useState(false);
+  const [emotionalState,       setEmotionalState]       = useState('relaxed');
+  const [dogState,             setDogState]             = useState('idle');
+  const [movementState,        setMovementState]        = useState('idle');
+  const [gazeTarget,           setGazeTarget]           = useState({ x: 0, y: 0 });
+  const [breathRhythm,         setBreathRhythm]         = useState(1.0);
+  const [soundReactionActive,  setSoundReactionActive]  = useState(false);
+  const [soundReactionDir,     setSoundReactionDir]     = useState(0);
+  const [personality,          setPersonality]          = useState({});
+  const [ready,                setReady]                = useState(false);
 
   // ── Worker messaging ────────────────────────────────────────────────────────
   const send = useCallback((type, payload = {}) => {
@@ -36,7 +52,7 @@ export function useBehaviourEngine(dogConfig, activeProfileId) {
       const id = ++msgIdRef.current;
       pendingRef.current[id] = resolve;
       workerRef.current.postMessage({ type, id, payload });
-      // Timeout safety — resolve null after 3s to prevent leaks
+      // 3s timeout — prevents promise leaks on worker restart
       setTimeout(() => {
         if (pendingRef.current[id]) {
           delete pendingRef.current[id];
@@ -46,21 +62,31 @@ export function useBehaviourEngine(dogConfig, activeProfileId) {
     });
   }, []);
 
-  // ── Apply result to state ───────────────────────────────────────────────────
+  // Fire-and-forget (no response needed — saves roundtrip overhead)
+  const fire = useCallback((type, payload = {}) => {
+    if (!workerRef.current) return;
+    workerRef.current.postMessage({ type, id: 0, payload });
+  }, []);
+
+  // ── Apply snapshot to React state ───────────────────────────────────────────
   const applySnapshot = useCallback((snapshot) => {
     if (!snapshot) return;
-    if (snapshot.emotionalState) setEmotionalState(snapshot.emotionalState);
-    if (snapshot.dogState)       setDogState(snapshot.dogState);
-    if (snapshot.personality)   {
+    if (snapshot.emotionalState)  setEmotionalState(snapshot.emotionalState);
+    if (snapshot.dogState)        setDogState(snapshot.dogState);
+    if (snapshot.movementState)   setMovementState(snapshot.movementState);
+    if (snapshot.gazeTarget)      setGazeTarget(snapshot.gazeTarget);
+    if (snapshot.breathRhythm !== undefined) setBreathRhythm(snapshot.breathRhythm);
+    if (snapshot.soundReactionActive !== undefined) setSoundReactionActive(snapshot.soundReactionActive);
+    if (snapshot.soundReactionDir !== undefined)    setSoundReactionDir(snapshot.soundReactionDir);
+    if (snapshot.personality) {
       setPersonality(snapshot.personality);
-      // Persist learned personality
       try {
         localStorage.setItem(PERSONALITY_LS_KEY, JSON.stringify(snapshot.personality));
       } catch {}
     }
   }, []);
 
-  // ── Init worker ─────────────────────────────────────────────────────────────
+  // ── Init worker (once per profile) ─────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
 
@@ -77,35 +103,45 @@ export function useBehaviourEngine(dogConfig, activeProfileId) {
         pendingRef.current[id](result);
         delete pendingRef.current[id];
       }
-      // Also update state for tick results
-      if (type === 'TICK_RESULT' || type === 'INIT_DONE') {
-        if (!cancelled) applySnapshot(result);
+      // Update state for async push messages
+      if ((type === 'TICK_RESULT' || type === 'INIT_DONE') && !cancelled) {
+        applySnapshot(result);
       }
       if (type === 'INTERACTION_RESULT' && !cancelled) {
-        applySnapshot({ emotionalState: result?.newState, personality: result?.personality });
-        if (result?.dogState) setDogState(result.dogState);
+        applySnapshot({
+          emotionalState: result?.newState,
+          personality:    result?.personality,
+          gazeTarget:     result?.gazeTarget,
+          dogState:       result?.dogState,
+        });
+      }
+      if ((type === 'SOUND_RESULT' || type === 'MEMORY_RESULT' || type === 'ENV_RESULT') && !cancelled) {
+        applySnapshot(result);
       }
     };
+
     worker.onerror = (err) => {
       console.warn('[Immortail] BehaviourWorker error:', err.message);
     };
 
-    // Load stored personality
+    // Restore stored personality
     let storedPersonality = null;
     try {
       const raw = localStorage.getItem(PERSONALITY_LS_KEY);
       if (raw) storedPersonality = JSON.parse(raw);
     } catch {}
 
-    // Init
+    // Init all agents
     send('INIT', {
-      config:           dogConfig,
+      config:            dogConfig,
       storedPersonality,
-      hour:             new Date().getHours(),
+      hour:              new Date().getHours(),
+      env:               currentEnv || 'day',
     }).then(result => {
       if (!cancelled) {
         applySnapshot(result);
         setReady(true);
+        lastEnvRef.current = currentEnv;
       }
     });
 
@@ -115,17 +151,18 @@ export function useBehaviourEngine(dogConfig, activeProfileId) {
       workerRef.current = null;
       if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
     };
-  // Only re-init if profile changes — not on every dogConfig update
+  // Re-init only on profile change — NOT on every render
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProfileId]);
 
-  // ── Update config when it changes (without re-initing) ────────────────────
+  // ── Update dogConfig without re-initing ────────────────────────────────────
   useEffect(() => {
     if (!ready || !dogConfig) return;
     send('INIT', {
-      config:           dogConfig,
-      storedPersonality: null, // don't overwrite learned personality
-      hour:             new Date().getHours(),
+      config:            dogConfig,
+      storedPersonality: null, // preserve learned personality
+      hour:              new Date().getHours(),
+      env:               currentEnv || 'day',
     }).then(applySnapshot);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dogConfig, ready]);
@@ -141,20 +178,77 @@ export function useBehaviourEngine(dogConfig, activeProfileId) {
     };
   }, [ready, send, applySnapshot]);
 
+  // ── Env change → Agent 6 ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (!ready || !currentEnv) return;
+    if (currentEnv === lastEnvRef.current) return; // no-op on same env
+    lastEnvRef.current = currentEnv;
+    send('ENV_CHANGE', { env: currentEnv }).then(applySnapshot);
+  }, [currentEnv, ready, send, applySnapshot]);
+
   // ── Public API ──────────────────────────────────────────────────────────────
-  const notifyInteraction = useCallback((interactionType) => {
-    send('INTERACTION', { interactionType, timestamp: Date.now() });
-  }, [send]);
 
-  const notifySoundPlayed = useCallback(() => {
-    send('SOUND_PLAYED', { timestamp: Date.now() });
-  }, [send]);
+  // Agent 2/3/5: interaction
+  const notifyInteraction = useCallback((interactionType, pointerX, pointerY) => {
+    send('INTERACTION', {
+      interactionType,
+      timestamp: Date.now(),
+      pointerX,
+      pointerY,
+    }).then(result => {
+      if (!result) return;
+      applySnapshot({
+        emotionalState: result.newState,
+        personality:    result.personality,
+        gazeTarget:     result.gazeTarget,
+        dogState:       result.dogState,
+      });
+    });
+  }, [send, applySnapshot]);
 
-  const notifyMemoryMoment = useCallback(() => {
-    send('MEMORY_MOMENT', { timestamp: Date.now() });
+  // Agent 4: sound played
+  const notifySoundPlayed = useCallback((direction) => {
+    send('SOUND_PLAYED', {
+      timestamp: Date.now(),
+      direction: direction ?? (Math.random() > 0.5 ? 0.35 : -0.35),
+    }).then(applySnapshot);
+  }, [send, applySnapshot]);
+
+  // Agent 7: memory moment surfaced
+  const notifyMemoryMoment = useCallback((memoryType, emotionalTags) => {
+    send('MEMORY_MOMENT', {
+      timestamp:    Date.now(),
+      memoryType,
+      emotionalTags,
+    }).then(applySnapshot);
+  }, [send, applySnapshot]);
+
+  // Agent 6: environment changed (explicit call from ImmorTailPage)
+  const notifyEnvChange = useCallback((env) => {
+    if (env === lastEnvRef.current) return;
+    lastEnvRef.current = env;
+    send('ENV_CHANGE', { env }).then(applySnapshot);
+  }, [send, applySnapshot]);
+
+  // Agent 8: pointer position (gaze tracking — throttled)
+  const notifyPointerMove = useCallback((normX, normY) => {
+    const now = Date.now();
+    if (now - lastPointerSend.current < POINTER_THROTTLE_MS) return;
+    lastPointerSend.current = now;
+    fire('POINTER_MOVE', { x: normX, y: normY });
+  }, [fire]);
+
+  // Agent 9: FPS/performance feedback
+  const notifyPerformance = useCallback((fps, isLowPower) => {
+    send('PERFORMANCE_UPDATE', { fps, isLowPower }).then(result => {
+      if (result?.throttleLevel !== undefined) {
+        // throttleLevel is tracked inside the worker; no React state needed
+      }
+    });
   }, [send]);
 
   return {
+    // ── Existing API (preserved) ──────────────────────────────────────────
     emotionalState,
     dogState,
     personality,
@@ -162,5 +256,14 @@ export function useBehaviourEngine(dogConfig, activeProfileId) {
     notifyInteraction,
     notifySoundPlayed,
     notifyMemoryMoment,
+    // ── New agent outputs ─────────────────────────────────────────────────
+    movementState,
+    gazeTarget,
+    breathRhythm,
+    soundReactionActive,
+    soundReactionDir,
+    notifyEnvChange,
+    notifyPointerMove,
+    notifyPerformance,
   };
 }

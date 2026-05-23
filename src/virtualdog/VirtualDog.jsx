@@ -27,6 +27,7 @@ import {
   buildAppearanceFromConfig,
   setQuality, setPointerPosition, clearPointer,
   playIntroduction,
+  setBreathRhythm, setGazeTarget, setMovementHint,
 } from './dogRenderer.js';
 import { useBehaviourEngine } from '../hooks/useBehaviourEngine.js';
 import { DOG_STATES, INTERACTIONS } from '../core/constants.js';
@@ -66,6 +67,7 @@ export default function VirtualDog({
   onReady          = null,
   showIntro        = false,
   onNotifyRef      = null,
+  currentEnv       = 'day',
 }) {
   const canvasRef      = useRef(null);
   const stateTimerRef  = useRef(null);
@@ -78,11 +80,17 @@ export default function VirtualDog({
   // ── Behaviour engine (local AI worker) ─────────────────────────────────────
   const {
     dogState: behaviourDogState,
+    movementState,
+    gazeTarget,
+    breathRhythm,
+    soundReactionActive,
+    soundReactionDir,
     notifyInteraction,
     notifySoundPlayed,
     notifyMemoryMoment,
+    notifyPointerMove,
     ready: behaviourReady,
-  } = useBehaviourEngine(dogConfig, profile?.id);
+  } = useBehaviourEngine(dogConfig, profile?.id, currentEnv);
 
   // ─── Init canvas ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -134,6 +142,27 @@ export default function VirtualDog({
     setCurrentState(mapped);
     setDogState(mapped);
   }, [behaviourDogState, behaviourReady]);
+
+  // ── Agent 8: gaze target → renderer ───────────────────────────────────────
+  useEffect(() => {
+    if (gazeTarget && typeof setGazeTarget === 'function') {
+      setGazeTarget(gazeTarget.x, gazeTarget.y);
+    }
+  }, [gazeTarget]);
+
+  // ── Agent 10: breath rhythm → renderer ────────────────────────────────────
+  useEffect(() => {
+    if (breathRhythm !== undefined && typeof setBreathRhythm === 'function') {
+      setBreathRhythm(breathRhythm);
+    }
+  }, [breathRhythm]);
+
+  // ── Agent 3: movement hint → renderer ─────────────────────────────────────
+  useEffect(() => {
+    if (movementState && typeof setMovementHint === 'function') {
+      setMovementHint(movementState);
+    }
+  }, [movementState]);
 
   // ── Presence override (idle sequence from useEmotionalPresence) ────────────
   // Lower priority than behaviour engine — only applies if no active interaction
@@ -220,7 +249,11 @@ export default function VirtualDog({
     const y    = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
     setPointerPosition(x, y);
     pointerActive.current = true;
-  }, [interactive]);
+    // Agent 8: send normalised coords to gaze agent (throttled)
+    const normX = ((x / rect.width)  - 0.5) * 2;   // -1 .. +1
+    const normY = ((y / rect.height) - 0.5) * 2;
+    notifyPointerMove(normX, normY);
+  }, [interactive, notifyPointerMove]);
 
   const handlePointerLeave = useCallback(() => {
     clearPointer();
@@ -229,9 +262,9 @@ export default function VirtualDog({
 
   // Expose notify functions to parent via onNotifyRef callback
   useEffect(() => {
-    onNotifyRef?.({ notifySoundPlayed, notifyMemoryMoment });
+    onNotifyRef?.({ notifySoundPlayed, notifyMemoryMoment, notifyPointerMove });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notifySoundPlayed, notifyMemoryMoment]);
+  }, [notifySoundPlayed, notifyMemoryMoment, notifyPointerMove]);
 
   // Cleanup
   useEffect(() => () => {

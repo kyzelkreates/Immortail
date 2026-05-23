@@ -197,6 +197,7 @@ export default function ImmorTailPage() {
         >
           <div className="h-[280px] flex items-center justify-center">
             <VirtualDog
+              currentEnv={envMode}
               profile={profile}
               dogConfig={activeConfig}
               onInteraction={handleInteraction}

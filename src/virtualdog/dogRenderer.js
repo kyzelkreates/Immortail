@@ -968,3 +968,66 @@ function hexToRgb(hex) {
   const b = parseInt(hex.slice(5, 7), 16);
   return `${r},${g},${b}`;
 }
+
+// ─── Agent-driven renderer extensions (additive — v2.0) ──────────────────────
+// These extend the existing renderer without touching any existing functions.
+
+/**
+ * setBreathRhythm — Agent 10 (Companion Presence) drives breathing speed.
+ * 0.4 = very slow (sleeping), 1.0 = normal, 1.8 = excited.
+ */
+export function setBreathRhythm(rhythm) {
+  if (!anim) return;
+  const clamped = Math.max(0.2, Math.min(2.5, rhythm));
+  anim.breathRhythmTarget = clamped;
+}
+
+/**
+ * setGazeTarget — Agent 8 (Attention & Gaze) drives eye/head direction.
+ * x: -1 (left) .. +1 (right), y: -1 (up) .. +1 (down)
+ * Applied softly — renderer lerps toward target each frame.
+ */
+export function setGazeTarget(x, y) {
+  if (!anim) return;
+  anim.eyeGazeXTarget  = Math.max(-0.8, Math.min(0.8, x || 0)) * 6; // px offset
+  anim.eyeGazeYTarget  = Math.max(-0.6, Math.min(0.6, y || 0)) * 4;
+  anim.headTiltTarget  = Math.max(-0.18, Math.min(0.18, (x || 0) * 0.18));
+}
+
+/**
+ * setMovementHint — Agent 3 (Procedural Movement) hints the next movement.
+ * Maps movement agent states to renderer adjustments.
+ * Does not override user-triggered state transitions.
+ */
+export function setMovementHint(movementState) {
+  if (!anim || !_currentState) return;
+  // Only apply movement hints when dog is in idle/sitting (not user-interacting)
+  const idleStates = ['idle', 'sitting'];
+  if (!idleStates.includes(_currentState)) return;
+
+  switch (movementState) {
+    case 'stretching':
+      // Stretch: flatten body slightly, tail drops then rises
+      anim.restingOffsetTarget = 8;
+      anim.earLiftTarget       = -0.05;
+      setTimeout(() => { if (anim) anim.restingOffsetTarget = 0; }, 2000);
+      break;
+    case 'repositioning':
+      // Reposition: target new posX (the worker already set posXTarget — just nudge)
+      anim.walkSpeedTarget = 0.3;
+      setTimeout(() => { if (anim) anim.walkSpeedTarget = 0; }, 1500);
+      break;
+    case 'wagging':
+      // Extra tail wag burst
+      anim.tailSpeedTarget = 0.18;
+      setTimeout(() => { if (anim) anim.tailSpeedTarget = 0.05; }, 2500);
+      break;
+    case 'sitting':
+      anim.restingOffsetTarget = 4;
+      break;
+    case 'idle':
+    default:
+      anim.restingOffsetTarget = 0;
+      break;
+  }
+}
