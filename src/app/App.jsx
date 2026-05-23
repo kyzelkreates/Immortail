@@ -24,6 +24,8 @@ import MemoriesPage   from '../pages/MemoriesPage.jsx';
 import SoundsPage     from '../pages/SoundsPage.jsx';
 import TimelinePage   from '../pages/TimelinePage.jsx';
 import SettingsPage   from '../pages/SettingsPage.jsx';
+import VideosPage     from '../pages/VideosPage.jsx';
+import MemoryWalkPage from '../pages/MemoryWalkPage.jsx';
 
 // Components
 import LoadingScreen  from '../components/ui/LoadingScreen.jsx';
@@ -160,6 +162,13 @@ export default function App({ onReady }) {
           <ProtectedRoute>
             <SettingsPage onOpenRestore={() => setRestoreMode('manual')} />
           </ProtectedRoute>
+        } />
+
+        <Route path={ROUTES.VIDEOS} element={
+          <ProtectedRoute><VideosPage /></ProtectedRoute>
+        } />
+        <Route path={ROUTES.MEMORY_WALK} element={
+          <ProtectedRoute><MemoryWalkPage /></ProtectedRoute>
         } />
 
         {/* Catch-all */}

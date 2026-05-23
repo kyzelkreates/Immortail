@@ -12,6 +12,8 @@ export const ROUTES = {
   IMMORTAIL:   '/immortail',
   MEMORIES:    '/memories',
   SOUNDS:      '/sounds',
+  VIDEOS:      '/videos',
+  MEMORY_WALK: '/memory-walk',
   TIMELINE:    '/timeline',
   SETTINGS:    '/settings',
 };
@@ -185,3 +187,26 @@ export const COMFORT_WORDS = {
     legacy:     'story',
   },
 };
+
+// ─── Video memory constants ───────────────────────────────────────────────────
+export const MAX_VIDEO_SIZE_MB   = 200;
+export const MAX_VIDEOS_PER_DOG  = 20;
+export const SUPPORTED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
+
+// ─── Companion ritual presets ─────────────────────────────────────────────────
+export const COMPANION_RITUALS = [
+  { id: 'bedtime',   label: 'Bedtime',         emoji: '😴', env: 'fireplace', dogState: 'sleeping', hour: [21,22,23,0] },
+  { id: 'morning',   label: 'Morning greeting', emoji: '🌅', env: 'golden',    dogState: 'excited',  hour: [6,7,8,9]   },
+  { id: 'fireplace', label: 'Fireplace rest',   emoji: '🔥', env: 'fireplace', dogState: 'sleeping', hour: null        },
+  { id: 'memorial',  label: 'Memorial candle',  emoji: '🕯️', env: 'night',     dogState: 'sitting',  hour: null        },
+  { id: 'evening',   label: 'Calm evening',     emoji: '🌙', env: 'dusk',      dogState: 'sitting',  hour: [18,19,20]  },
+  { id: 'walk',      label: 'Memory walk',      emoji: '🐾', env: 'golden',    dogState: 'walking',  hour: null        },
+];
+
+// ─── Quiet companion mode ─────────────────────────────────────────────────────
+export const QUIET_MODE_TIMEOUT_MS = 8 * 60 * 1000; // 8 min inactivity → suggest quiet mode
+
+// ─── Favourite spot keys (localStorage) ──────────────────────────────────────
+export const SPOT_LS_KEY        = 'immortail:favouriteSpot';
+export const RITUAL_LS_KEY      = 'immortail:ritualHistory';
+export const ADAPTATION_LS_KEY  = 'immortail:adaptation';

@@ -9,7 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 // ─── DB Config ────────────────────────────────────────────────────────────────
 const DB_NAME    = 'immortail-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const STORES = {
   PHOTOS:      'photos',
@@ -22,6 +22,8 @@ const STORES = {
   VOICE_CMDS:  'voice_commands',
   TIMELINE:    'timeline',
   SETTINGS:    'settings',
+  VIDEOS:      'videos',          // v2
+  ADAPTATION:  'adaptation',     // v2 — companion learning
 };
 
 // ─── LS Keys ──────────────────────────────────────────────────────────────────
@@ -91,6 +93,17 @@ async function getDB() {
       if (!db.objectStoreNames.contains(STORES.SETTINGS)) {
         db.createObjectStore(STORES.SETTINGS, { keyPath: 'key' });
       }
+      // ── v2 stores ─────────────────────────────────────────────────────────
+      // Videos (memory video uploads)
+      if (!db.objectStoreNames.contains(STORES.VIDEOS)) {
+        const v = db.createObjectStore(STORES.VIDEOS, { keyPath: 'id' });
+        v.createIndex('profileId', 'profileId');
+        v.createIndex('createdAt', 'createdAt');
+      }
+      // Companion adaptation (ritual history, spot preferences)
+      if (!db.objectStoreNames.contains(STORES.ADAPTATION)) {
+        db.createObjectStore(STORES.ADAPTATION, { keyPath: 'profileId' });
+      }
     }
   });
   return _db;
@@ -143,11 +156,13 @@ export const Profiles = {
     // Cascade delete all profile data
     await Photos.deleteByProfile(id);
     await Sounds.deleteByProfile(id);
+    await Videos.deleteByProfile(id);
     await MemoryEntries.deleteByProfile(id);
     await DogConfig.delete(id);
     await VoiceCommands.deleteByProfile(id);
     await Timeline.deleteByProfile(id);
     await AICache.deleteByProfile(id);
+    await CompanionAdaptation.delete(id);
   }
 };
 
@@ -268,6 +283,87 @@ export const VoiceCommands = {
     const items = await this.listByProfile(profileId);
     await Promise.all(items.map(i => dbDelete(STORES.VOICE_CMDS, i.id)));
   }
+};
+
+
+// ─── Videos ───────────────────────────────────────────────────────────────────
+export const Videos = {
+  async add(profileId, { blob, thumbnail, metadata = {}, extractedSoundBlob = null, analysis = null }) {
+    const id = uuidv4();
+    const record = {
+      id, profileId,
+      blob,                // full video blob (may be large — stored in IDB)
+      thumbnail,           // first-frame thumbnail blob
+      extractedSoundBlob,  // audio extracted from video (null until processed)
+      metadata: {
+        name:     metadata.name,
+        type:     metadata.type,
+        size:     metadata.size,
+        duration: metadata.duration || 0,
+        ...metadata,
+      },
+      analysis,            // { dominantColour, ambientType, movementIntensity, … }
+      processed: false,    // true after local video AI analysis complete
+      createdAt: Date.now(),
+    };
+    await dbPut(STORES.VIDEOS, record);
+    return record;
+  },
+  async get(id)                { return dbGet(STORES.VIDEOS, id); },
+  async listByProfile(profileId) { return dbGetAllByIndex(STORES.VIDEOS, 'profileId', profileId); },
+  async update(id, data) {
+    const existing = await dbGet(STORES.VIDEOS, id);
+    if (!existing) throw new Error('Video not found');
+    await dbPut(STORES.VIDEOS, { ...existing, ...data, id });
+    return { ...existing, ...data, id };
+  },
+  async delete(id) { return dbDelete(STORES.VIDEOS, id); },
+  async deleteByProfile(profileId) {
+    const items = await this.listByProfile(profileId);
+    await Promise.all(items.map(i => dbDelete(STORES.VIDEOS, i.id)));
+  },
+};
+
+// ─── Companion Adaptation (ritual + spot learning) ────────────────────────────
+export const CompanionAdaptation = {
+  async get(profileId) {
+    const record = await dbGet(STORES.ADAPTATION, profileId);
+    return record || {
+      profileId,
+      ritualCounts:    {},   // { ritualId: count }
+      spotPreference:  null, // 'sofa' | 'fireplace' | 'garden' | …
+      envPreference:   null,
+      lastEnv:         null,
+      interactionLog:  [],   // last 50 interaction timestamps + types
+      totalSessions:   0,
+      updatedAt:       0,
+    };
+  },
+  async save(profileId, data) {
+    await dbPut(STORES.ADAPTATION, { ...data, profileId, updatedAt: Date.now() });
+  },
+  async logRitual(profileId, ritualId) {
+    const ad = await this.get(profileId);
+    ad.ritualCounts[ritualId] = (ad.ritualCounts[ritualId] || 0) + 1;
+    await this.save(profileId, ad);
+  },
+  async logEnv(profileId, env) {
+    const ad = await this.get(profileId);
+    ad.lastEnv = env;
+    // Derive preferred env from last 20 usage records
+    if (!ad.envLog) ad.envLog = [];
+    ad.envLog = [env, ...ad.envLog].slice(0, 20);
+    const freq = {};
+    ad.envLog.forEach(e => { freq[e] = (freq[e] || 0) + 1; });
+    ad.envPreference = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+    await this.save(profileId, ad);
+  },
+  async incrementSession(profileId) {
+    const ad = await this.get(profileId);
+    ad.totalSessions = (ad.totalSessions || 0) + 1;
+    await this.save(profileId, ad);
+  },
+  async delete(profileId) { return dbDelete(STORES.ADAPTATION, profileId); },
 };
 
 // ─── Timeline ─────────────────────────────────────────────────────────────────

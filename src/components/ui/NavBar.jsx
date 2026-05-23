@@ -4,11 +4,11 @@ import { ROUTES } from '../../core/constants.js';
 import { useApp } from '../../core/AppContext.jsx';
 
 const NAV_ITEMS = [
-  { to: ROUTES.IMMORTAIL, icon: '🐾', label: 'My Dog' },
-  { to: ROUTES.MEMORIES,  icon: '🖼️', label: 'Memories' },
-  { to: ROUTES.SOUNDS,    icon: '🎵', label: 'Sounds' },
-  { to: ROUTES.TIMELINE,  icon: '📅', label: 'Timeline' },
-  { to: ROUTES.SETTINGS,  icon: '⚙️', label: 'Settings' },
+  { to: ROUTES.IMMORTAIL,  icon: '🐾', label: 'My Dog'   },
+  { to: ROUTES.MEMORIES,   icon: '🖼️', label: 'Memories' },
+  { to: ROUTES.SOUNDS,     icon: '🎵', label: 'Sounds'   },
+  { to: ROUTES.VIDEOS,     icon: '🎬', label: 'Videos'   },
+  { to: ROUTES.SETTINGS,   icon: '⚙️', label: 'Settings' },
 ];
 
 export default function NavBar() {

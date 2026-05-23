@@ -20,7 +20,10 @@ import { useEmotionalPresence }   from '../hooks/useEmotionalPresence.js';
 import { useMemoryMoments }       from '../hooks/useMemoryMoments.js';
 import { usePerformanceGovernor } from '../hooks/usePerformanceGovernor.js';
 import { useAmbientVoice }        from '../hooks/useAmbientVoice.js';
-import { getAutoEnvMode }          from '../core/constants.js';
+import { getAutoEnvMode, ROUTES }   from '../core/constants.js';
+import { useNavigate }                from 'react-router-dom';
+import { useCompanionRituals }        from '../hooks/useCompanionRituals.js';
+import { useQuietCompanion }          from '../hooks/useQuietCompanion.js';
 
 const ENV_CYCLE = [
   ENV_MODES.DAY, ENV_MODES.GOLDEN, ENV_MODES.SUNSET, ENV_MODES.DUSK,
@@ -86,11 +89,13 @@ export default function ImmorTailPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memoryMoment?.id]);
 
-  // Cycle environment
+  // Cycle environment (logs env for adaptation)
   const cycleEnv = () => {
     setEnvMode(prev => {
-      const idx = ENV_CYCLE.indexOf(prev);
-      return ENV_CYCLE[(idx + 1) % ENV_CYCLE.length];
+      const idx  = ENV_CYCLE.indexOf(prev);
+      const next = ENV_CYCLE[(idx + 1) % ENV_CYCLE.length];
+      logEnv(next);
+      return next;
     });
   };
 
@@ -140,6 +145,18 @@ export default function ImmorTailPage() {
     // Sound plays in VoiceRecallPanel — just log
     setInteractionLog(prev => [{ type: 'voice:' + reaction, ts: Date.now() }, ...prev.slice(0, 9)]);
   }, []);
+
+  // Ritual activation
+  const handleStartRitual = useCallback(async (ritualId) => {
+    const ritual = await startRitual(ritualId);
+    if (!ritual) return;
+    if (ritual.env)      { setEnvMode(ritual.env); logEnv(ritual.env); }
+    if (ritual.dogState) setActiveInteraction(ritual.dogState);
+    // Bedtime ambient voice
+    if (ritualId === 'bedtime') speak('bedtime', { name: profile?.name });
+    // Morning greeting voice
+    if (ritualId === 'morning') speak('welcome-back', { name: profile?.name });
+  }, [startRitual, setEnvMode, logEnv, speak, profile]);
 
   // Rebuild dog AI
   const handleRebuild = useCallback(async () => {
@@ -273,9 +290,9 @@ export default function ImmorTailPage() {
         <div className="flex gap-1 glass-card p-1 rounded-xl">
           {[
             { id: 'interactions', label: '🐾 Interact' },
-            { id: 'voice',        label: '📣 Voice' },
+            { id: 'rituals',      label: '🕯️ Rituals' },
             { id: 'moments',      label: '✨ Moments' },
-            { id: 'ai',           label: '🤖 AI' },
+            { id: 'quiet',        label: '😴 Quiet' },
           ].map(tab => (
             <button
               key={tab.id}
@@ -330,6 +347,115 @@ export default function ImmorTailPage() {
                   if (dogState) setActiveInteraction(dogState);
                 }}
               />
+            </motion.div>
+          )}
+
+          {showPanel === 'rituals' && (
+            <motion.div key="rituals" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3">
+              {/* Memory Walk entry */}
+              <button
+                onClick={() => navigate(ROUTES.MEMORY_WALK)}
+                className="w-full glass-card-warm border border-immortail-gold/20 rounded-2xl p-4 flex items-center gap-3"
+              >
+                <span className="text-2xl">🐾</span>
+                <div className="flex-1 text-left">
+                  <p className="text-sm font-medium text-immortail-cream">Memory Walk</p>
+                  <p className="text-xs text-immortail-soft">Wander through their memories together</p>
+                </div>
+                <span className="text-immortail-gold/60 text-sm">→</span>
+              </button>
+
+              {/* Suggested ritual */}
+              {suggestedRitual && (
+                <div className="glass-card border border-immortail-gold/15 rounded-2xl p-3">
+                  <p className="text-[10px] text-immortail-gold/60 uppercase tracking-widest mb-2">Suggested now</p>
+                  <button
+                    onClick={() => handleStartRitual(suggestedRitual.id)}
+                    className="w-full flex items-center gap-3"
+                  >
+                    <span className="text-2xl">{suggestedRitual.emoji}</span>
+                    <div className="flex-1 text-left">
+                      <p className="text-sm font-medium text-immortail-cream">{suggestedRitual.label}</p>
+                      <p className="text-xs text-immortail-soft">Tap to begin</p>
+                    </div>
+                    {activeRitual?.id === suggestedRitual.id && (
+                      <span className="text-[10px] text-immortail-gold border border-immortail-gold/30 rounded-full px-2 py-0.5">Active</span>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* All rituals */}
+              <div className="grid grid-cols-2 gap-2">
+                {rituals.map(r => (
+                  <button
+                    key={r.id}
+                    onClick={() => activeRitual?.id === r.id ? stopRitual() : handleStartRitual(r.id)}
+                    className={`glass-card rounded-2xl p-3 text-left transition-all ${
+                      activeRitual?.id === r.id
+                        ? 'border border-immortail-gold/40 bg-immortail-gold/8'
+                        : 'border border-white/8 hover:border-white/15'
+                    }`}
+                  >
+                    <div className="text-xl mb-1">{r.emoji}</div>
+                    <p className="text-xs font-medium text-immortail-cream leading-tight">{r.label}</p>
+                    {r.usageCount > 0 && (
+                      <p className="text-[10px] text-immortail-soft/40 mt-0.5">{r.usageCount}×</p>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {showPanel === 'quiet' && (
+            <motion.div key="quiet" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3">
+              <div className="glass-card rounded-2xl p-5 text-center space-y-4">
+                <motion.div
+                  animate={quietMode ? { scale: [1, 1.05, 1] } : {}}
+                  transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                  className="text-5xl"
+                >
+                  {quietMode ? '😴' : '🌙'}
+                </motion.div>
+                <div>
+                  <p className="text-sm font-medium text-immortail-cream">
+                    {quietMode ? 'Quiet Companion Mode' : 'Enter Quiet Mode'}
+                  </p>
+                  <p className="text-xs text-immortail-soft/70 mt-1 leading-relaxed">
+                    {quietMode
+                      ? `Resting peacefully${quietDurationLabel ? ` · ${quietDurationLabel}` : ''}. No prompts. Just presence.`
+                      : `${profile?.name || 'Your companion'} will rest quietly. No interactions, no prompts — just comfort.`
+                    }
+                  </p>
+                </div>
+                <button
+                  onClick={quietMode ? deactivateQuiet : activateQuiet}
+                  className={`w-full py-3 rounded-2xl text-sm font-medium transition-all ${
+                    quietMode
+                      ? 'bg-white/8 text-immortail-soft hover:bg-white/12'
+                      : 'btn-primary'
+                  }`}
+                >
+                  {quietMode ? 'Wake them up' : 'Rest quietly'}
+                </button>
+              </div>
+
+              {/* Quiet mode tips */}
+              <div className="glass-card rounded-2xl p-4 space-y-2">
+                <p className="text-[10px] text-immortail-soft/50 uppercase tracking-widest">In quiet mode</p>
+                {[
+                  'No interaction prompts',
+                  'Gentle breathing animation',
+                  'Calm ambient environment',
+                  'Memory moments paused',
+                ].map((tip, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs text-immortail-soft/70">
+                    <span className="w-1 h-1 rounded-full bg-immortail-gold/40 shrink-0" />
+                    {tip}
+                  </div>
+                ))}
+              </div>
             </motion.div>
           )}
 
